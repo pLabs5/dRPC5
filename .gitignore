@@ -1,0 +1,8 @@
+build/
+dist/
+tools/lib/
+*.o
+*.elf
+*.kate-swp
+__pycache__/
+ps5-payload-sdk/

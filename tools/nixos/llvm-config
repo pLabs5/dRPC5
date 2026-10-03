@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+bindir="$(readlink -m "$(dirname "${BASH_SOURCE[0]}")/../../build/nixos-toolchain-bin")"
+
+find_tool() {
+    local tool="$1" dir
+    local dirs
+    IFS=':' read -r -a dirs <<< "$PATH"
+    for dir in "${dirs[@]}"; do
+        [[ -z "$dir" ]] && continue
+        [[ -e "$dir/prospero-llvm" ]] && continue
+        if [[ -x "$dir/$tool" ]]; then
+            printf '%s\n' "$dir/$tool"
+            return 0
+        fi
+    done
+    return 1
+}
+
+clang_installed_dir() {
+    local driver
+    driver="$(find_tool clang)" || return 1
+    "$driver" -### -E -x c /dev/null 2>&1 | sed -n 's/.*InstalledDir: //p' | head -n 1
+}
+
+if [[ "${1:-}" == "--bindir" && "$#" -eq 1 ]]; then
+    mkdir -p "$bindir"
+    installed="$(clang_installed_dir)" || installed=""
+    for tool in clang clang++; do
+        src=""
+        if [[ -n "$installed" && -x "$installed/$tool" ]]; then
+            src="$installed/$tool"
+        else
+            src="$(find_tool "$tool")" || src=""
+        fi
+        [[ -n "$src" ]] && ln -sfn "$src" "$bindir/$tool"
+    done
+    for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-ranlib llvm-strip; do
+        src="$(find_tool "$tool")" || continue
+        ln -sfn "$src" "$bindir/$tool"
+    done
+    if [[ ! -x "$bindir/clang" ]]; then
+        echo "nixos llvm-config shim: clang not found in PATH" >&2
+        exit 1
+    fi
+    printf '%s\n' "$bindir"
+    exit 0
+fi
+
+for candidate in llvm-config llvm-config-23 llvm-config-22 llvm-config-21 llvm-config-20 \
+                 llvm-config-19 llvm-config-18 llvm-config-17 llvm-config-16 llvm-config-15; do
+    src="$(find_tool "$candidate")" || continue
+    exec "$src" "$@"
+done
+
+echo "nixos llvm-config shim: llvm-config not found in PATH" >&2
+exit 1

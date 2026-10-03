@@ -1,0 +1,13 @@
+{
+    "applicationCategoryType": 65536,
+    "applicationDrmType": "free",
+    "contentId": "UP9000-DRPC00001_00-DRPC5AAAAAAAAAAA",
+    "deeplinkUri": "http://127.0.0.1:8642/",
+    "localizedParameters": {
+        "defaultLanguage": "en-US",
+        "en-US": {
+            "titleName": "dRPC5"
+        }
+    },
+    "titleId": "DRPC00001"
+}

@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dRPC5</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #12131a; color: #e3e5ef; font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding: 16px; max-width: 720px; margin: 0 auto;
+}
+h1 { font-size: 22px; margin-bottom: 4px; color: #fff; }
+h1 span { color: #5865f2; }
+h2 { font-size: 16px; margin: 18px 0 8px; color: #c8cad6; }
+.sub { color: #8b8f9e; font-size: 13px; margin-bottom: 14px; }
+.bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.pill { background: #1d1f29; border: 1px solid #2c2f3d; border-radius: 999px; padding: 4px 12px; font-size: 12px; color: #9fa3b4; }
+.pill.ok { border-color: #3ba55d; color: #57f287; }
+.pill.bad { border-color: #ed4245; color: #ff7b7b; }
+.tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.tabs button {
+  flex: 1; padding: 10px; background: #1d1f29; color: #9fa3b4; border: 1px solid #2c2f3d;
+  border-radius: 8px; font-size: 14px; cursor: pointer;
+}
+.tabs button.active { background: #5865f2; color: #fff; border-color: #5865f2; }
+.card { background: #191b24; border: 1px solid #262937; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+label { display: block; font-size: 12px; color: #8b8f9e; margin: 10px 0 4px; }
+input[type=text], input[type=password], input[type=number], select, textarea {
+  width: 100%; padding: 9px 10px; background: #12131a; color: #e3e5ef;
+  border: 1px solid #2c2f3d; border-radius: 8px; font-size: 14px;
+}
+.row { display: flex; gap: 10px; }
+.row > div { flex: 1; }
+button.act {
+  margin-top: 14px; width: 100%; padding: 11px; background: #5865f2; color: #fff;
+  border: 0; border-radius: 8px; font-size: 15px; cursor: pointer;
+}
+button.act.secondary { background: #2c2f3d; }
+button.act.danger { background: #a12f34; }
+button.act:disabled { opacity: .5; }
+.hint { font-size: 12px; color: #8b8f9e; margin-top: 8px; }
+.msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+.msg.err { color: #ff7b7b; }
+.msg.good { color: #57f287; }
+#qrbox { text-align: center; margin-top: 12px; }
+#qrbox img { background: #fff; padding: 8px; border-radius: 8px; }
+#cap { margin-top: 10px; }
+.hidden { display: none; }
+a { color: #5865f2; }
+</style>
+</head>
+<body>
+<h1>dRPC5 <span>rich presence</span></h1>
+<div class="sub">runs entirely on your ps5. no pc, no bridge.</div>
+<div class="bar">
+  <span class="pill" id="p-installed">tile: ?</span>
+  <span class="pill" id="p-token">sign-in: ?</span>
+  <span class="pill" id="p-net">server: ok</span>
+  <span class="pill" id="p-gw">presence: ?</span>
+</div>
+
+<div class="tabs">
+  <button id="tab-cfg" class="active">presence</button>
+  <button id="tab-sign">sign in</button>
+</div>
+
+<div id="view-cfg">
+  <div class="card">
+    <h2>presence mode</h2>
+    <div class="row">
+      <div><label>source</label>
+        <select id="c-mode">
+          <option value="auto">auto - detect the running game</option>
+          <option value="manual">manual - use the fields below</option>
+        </select>
+      </div>
+      <div><label>media line</label><input type="text" id="c-media_line" placeholder="Listening to Spotify"></div>
+    </div>
+    <label>application (client) id</label>
+    <input type="text" id="c-app_id" placeholder="1234567890123456789">
+    <h2>publish</h2>
+    <label><input type="checkbox" id="c-src_game" style="width:auto"> games</label>
+    <label><input type="checkbox" id="c-src_media" style="width:auto"> media apps</label>
+    <label><input type="checkbox" id="c-src_app" style="width:auto"> other apps</label>
+    <label><input type="checkbox" id="c-src_idle" style="width:auto"> idle / no game</label>
+    <div class="row">
+      <div><label><input type="checkbox" id="c-show_artwork" style="width:auto"> show artwork</label></div>
+      <div><label><input type="checkbox" id="c-show_platform" style="width:auto"> show platform line</label></div>
+    </div>
+    <div class="msg" id="gw-state">presence: waiting</div>
+  </div>
+  <div class="card" id="manual-card">
+    <h2>activity (manual mode)</h2>
+    <div class="row">
+      <div><label>name</label><input type="text" id="c-name" placeholder="playing something"></div>
+      <div><label>type</label>
+        <select id="c-type">
+          <option value="0">playing (0)</option>
+          <option value="1">streaming (1)</option>
+          <option value="2">listening (2)</option>
+          <option value="3">watching (3)</option>
+          <option value="5">competing (5)</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div><label>state</label><input type="text" id="c-state" placeholder="in a match"></div>
+      <div><label>details</label><input type="text" id="c-details" placeholder="round 3"></div>
+    </div>
+    <h2>assets</h2>
+    <div class="row">
+      <div><label>large image key</label><input type="text" id="c-asset_key"></div>
+      <div><label>large image text</label><input type="text" id="c-asset_text"></div>
+    </div>
+    <div class="row">
+      <div><label>small image key</label><input type="text" id="c-asset_small_key"></div>
+      <div><label>small image text</label><input type="text" id="c-asset_small_text"></div>
+    </div>
+    <h2>timing &amp; status</h2>
+    <div class="row">
+      <div><label>start timestamp (unix s)</label><input type="number" id="c-start_timestamp"></div>
+      <div><label>end timestamp (unix s)</label><input type="number" id="c-end_timestamp"></div>
+    </div>
+    <label>status</label>
+    <select id="c-status">
+      <option value="online">online</option>
+      <option value="dnd">do not disturb</option>
+      <option value="idle">idle</option>
+      <option value="invisible">invisible</option>
+    </select>
+    <label><input type="checkbox" id="c-enabled" style="width:auto"> enabled</label>
+    <button class="act" id="btn-save">save config</button>
+    <div class="msg" id="cfg-msg"></div>
+  </div>
+</div>
+
+<div id="view-sign" class="hidden">
+  <div class="card">
+    <h2>sign in with qr</h2>
+    <div class="hint">open discord on your phone, settings &rarr; link with other devices, then scan this. no password ever touches the ps5.</div>
+    <button class="act" id="btn-qr">generate qr</button>
+    <div id="qrbox"></div>
+    <div class="msg" id="qr-msg"></div>
+  </div>
+  <div class="card">
+    <h2>sign in with email</h2>
+    <label>email or username</label>
+    <input type="text" id="l-login" autocomplete="off">
+    <label>password</label>
+    <input type="password" id="l-pass">
+    <div id="mfa-wrap" class="hidden">
+      <label>2fa code</label>
+      <input type="text" id="l-mfa" inputmode="numeric" autocomplete="one-time-code">
+    </div>
+    <div id="cap" class="hidden"></div>
+    <button class="act" id="btn-login">sign in</button>
+    <div class="msg" id="login-msg"></div>
+    <div class="hint">captcha may appear above if discord asks for one. if it won't load, use qr or paste a token instead.</div>
+  </div>
+  <div class="card">
+    <h2>paste token</h2>
+    <div class="hint">grab your token from discord's devtools on any device and paste it here.</div>
+    <input type="password" id="t-paste" placeholder="user token">
+    <button class="act secondary" id="btn-paste">save token</button>
+    <div class="msg" id="token-msg"></div>
+    <button class="act danger hidden" id="btn-logout">sign out (delete token)</button>
+  </div>
+</div>
+
+<script src="/qrcode.js"></script>
+<script>
+var $ = function(id){ return document.getElementById(id); };
+var status = null;
+var raState = null;
+
+function api(path, opts) {
+  return fetch(path, opts).then(function(r){
+    return r.json().catch(function(){ return {}; }).then(function(j){
+      if (!r.ok && !j.error) j.error = 'http ' + r.status;
+      return j;
+    });
+  });
+}
+function post(path, obj) {
+  return api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(obj || {})});
+}
+function b64url(bytes) {
+  var s = '';
+  var i;
+  for (i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function b64(bytes) {
+  var s = '';
+  var i;
+  for (i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+function b64urlDecode(str) {
+  var s = str.replace(/-/g,'+').replace(/_/g,'/');
+  while (s.length % 4) s += '=';
+  var bin = atob(s);
+  var out = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function textToBytes(t) {
+  var out = new Uint8Array(t.length);
+  for (var i = 0; i < t.length; i++) out[i] = t.charCodeAt(i) & 0xff;
+  return out;
+}
+function setMsg(id, text, cls) {
+  var el = $(id);
+  el.textContent = text || '';
+  el.className = 'msg' + (cls ? ' ' + cls : '');
+}
+function cryptoOk() {
+  return !!(window.crypto && crypto.subtle && crypto.subtle.encrypt);
+}
+
+function refreshStatus() {
+  return api('/api/status').then(function(s) {
+    status = s;
+    $('p-installed').textContent = 'tile: ' + (s.installed ? 'installed' : 'not installed');
+    $('p-installed').className = 'pill ' + (s.installed ? 'ok' : 'bad');
+    $('p-token').textContent = 'sign-in: ' + (s.has_token ? 'ready' : 'none');
+    $('p-token').className = 'pill ' + (s.has_token ? 'ok' : '');
+    $('btn-logout').className = 'act danger' + (s.has_token ? '' : ' hidden');
+    renderGateway(s.gateway);
+    if (s.config) {
+      for (var k in s.config) {
+        var el = $('c-' + k);
+        if (!el) continue;
+        if (el.type === 'checkbox') el.checked = s.config[k] === '1' || s.config[k] === 'true';
+        else el.value = s.config[k];
+      }
+      applyMode();
+    }
+  }).catch(function(){ $('p-net').className = 'pill bad'; $('p-net').textContent = 'server: down'; });
+}
+
+function applyMode() {
+  var mode = $('c-mode') ? $('c-mode').value : 'auto';
+  var card = $('manual-card');
+  if (card) card.className = mode === 'manual' ? 'card' : 'card hidden';
+}
+
+function renderGateway(g) {
+  var text, cls;
+  if (!g) {
+    text = 'presence: ?';
+    cls = '';
+    $('gw-state').textContent = 'presence: waiting';
+  } else if (g.auth_failed) {
+    text = 'presence: token rejected';
+    cls = 'bad';
+    $('gw-state').textContent = 'discord rejected the token - sign in again';
+  } else if (g.ready) {
+    text = 'presence: live';
+    cls = 'ok';
+    $('gw-state').textContent = 'presence: live' + (g.activity ? ' - ' + g.activity : '');
+  } else if (g.connected) {
+    text = 'presence: connecting';
+    cls = '';
+    $('gw-state').textContent = 'presence: connecting...';
+  } else {
+    text = 'presence: off';
+    cls = '';
+    $('gw-state').textContent = 'presence: off (enable it and save a token)';
+  }
+  $('p-gw').textContent = text;
+  $('p-gw').className = 'pill ' + cls;
+}
+
+$('c-mode').onchange = applyMode;
+
+function collectConfig() {
+  var keys = ['app_id','name','type','state','details','asset_key','asset_text',
+              'asset_small_key','asset_small_text','start_timestamp','end_timestamp',
+              'status','mode','media_line'];
+  var checks = ['enabled','src_game','src_media','src_app','src_idle',
+                'show_artwork','show_platform'];
+  var obj = {};
+  keys.forEach(function(k){ var el = $('c-'+k); if (el) obj[k] = el.value; });
+  checks.forEach(function(k){
+    var el = $('c-'+k);
+    if (el) obj[k] = el.checked ? '1' : '0';
+  });
+  return obj;
+}
+
+$('btn-save').onclick = function() {
+  setMsg('cfg-msg', 'saving...');
+  post('/api/config', collectConfig()).then(function(r) {
+    setMsg('cfg-msg', r.error ? r.error : 'saved', r.error ? 'err' : 'good');
+  }).catch(function(e){ setMsg('cfg-msg', 'save failed', 'err'); });
+};
+
+function showTab(which) {
+  $('view-cfg').className = which === 'cfg' ? '' : 'hidden';
+  $('view-sign').className = which === 'sign' ? '' : 'hidden';
+  $('tab-cfg').className = which === 'cfg' ? 'active' : '';
+  $('tab-sign').className = which === 'sign' ? 'active' : '';
+}
+$('tab-cfg').onclick = function(){ showTab('cfg'); };
+$('tab-sign').onclick = function(){ showTab('sign'); };
+
+function raSend(obj) {
+  if (!raState) return Promise.reject('no session');
+  return post('/api/ra/send', {id: raState.id, data: JSON.stringify(obj)});
+}
+
+function handleRa(frame) {
+  var d;
+  try { d = JSON.parse(frame); } catch (e) { return; }
+  var op = d.op;
+  if (op === 'hello') return;
+
+  if (op === 'nonce_proof') {
+    var enc = d.encrypted_nonce || (d.d && d.d.encrypted_nonce);
+    if (!enc || !raState) return;
+    oaepDecrypt(raState.keys.priv, enc).then(function(buf) {
+      return raSend({op: 'nonce_proof', nonce: b64url(new Uint8Array(buf))});
+    }).catch(function(e) {
+      setMsg('qr-msg', 'nonce decrypt failed: ' + e.message, 'err');
+    });
+    return;
+  }
+
+  if (op === 'pending_remote_init') {
+    var fp = d.fingerprint || (d.d && d.d.fingerprint) || '';
+    setMsg('qr-msg', 'scan with the discord mobile app (settings \u2192 link with other devices)');
+    try {
+      var q = qrcode(0, 'M');
+      q.addData('https://discord.com/ra/' + fp);
+      q.make();
+      $('qrbox').innerHTML = q.createImgTag(4, 8);
+    } catch (e) {
+      setMsg('qr-msg', 'qr render failed: ' + e.message, 'err');
+    }
+    return;
+  }
+  if (op === 'pending_ticket') {
+    setMsg('qr-msg', 'scanned, waiting for confirmation...');
+    return;
+  }
+  if (op === 'pending_login') {
+    setMsg('qr-msg', 'exchanging login...');
+    post('/api/discord', {
+      method: 'POST',
+      path: '/api/v9/users/@me/remote-auth/login',
+      body: JSON.stringify({ticket: d.ticket})
+    }).then(function(r) {
+      if (r.error) throw new Error(r.error);
+      var body = JSON.parse(r.body);
+      if (!body.encrypted_token) throw new Error('no encrypted token (' + r.status + ')');
+      return raState.keys.priv.decrypt(
+        {name:'RSA-OAEP'},
+        b64urlDecode(body.encrypted_token));
+    }).then(function(buf) {
+      var token = bytesToText(new Uint8Array(buf));
+      return post('/api/token', {token: token});
+    }).then(function(r) {
+      if (r.error) throw new Error(r.error);
+      setMsg('qr-msg', 'signed in. token stored.', 'good');
+      $('qrbox').innerHTML = '';
+      refreshStatus();
+      if (raState) { post('/api/ra/close', {id: raState.id}); raState = null; }
+    }).catch(function(e) {
+      setMsg('qr-msg', 'qr login failed: ' + e.message, 'err');
+    });
+    return;
+  }
+  if (op === 'cancel') {
+    setMsg('qr-msg', 'cancelled on the phone', 'err');
+    return;
+  }
+  if (op === '_closed') {
+    if (raState) {
+      post('/api/ra/close', {id: raState.id});
+      raState = null;
+    }
+    return;
+  }
+  if (op === 'error') {
+    setMsg('qr-msg', 'gateway error: ' + (d.message || d.code || 'unknown'), 'err');
+    return;
+  }
+}
+
+function bytesToText(bytes) {
+  var s = '';
+  var i;
+  for (i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return s;
+}
+
+function oaepDecrypt(priv, b64) {
+  return crypto.subtle.decrypt({name:'RSA-OAEP'}, priv, b64urlDecode(b64));
+}
+
+function raLoop() {
+  if (!raState) return;
+  var wait = 25000;
+  api('/api/ra/poll?id=' + raState.id + '&wait=' + wait).then(function(r) {
+    if (r.error) throw new Error(r.error);
+    (r.frames || []).forEach(function(f) {
+      handleRa(f);
+    });
+    if (raState) raLoop();
+  }).catch(function(e) {
+    setMsg('qr-msg', 'connection lost: ' + e.message, 'err');
+    raState = null;
+  });
+}
+
+$('btn-qr').onclick = function() {
+  if (!cryptoOk()) { setMsg('qr-msg', 'webcrypto unavailable (needs secure context)', 'err'); return; }
+  if (raState) { post('/api/ra/close', {id: raState.id}); raState = null; }
+  setMsg('qr-msg', 'generating keys...');
+  $('qrbox').innerHTML = '';
+  $('btn-qr').disabled = true;
+  crypto.subtle.generateKey(
+    {name:'RSA-OAEP', modulusLength:2048, publicExponent:new Uint8Array([1,0,1]), hash:'SHA-256'},
+    true, ['encrypt','decrypt']
+  ).then(function(kp) {
+    return crypto.subtle.exportKey('spki', kp.publicKey).then(function(spki) {
+      var pk = new Uint8Array(spki);
+      return crypto.subtle.digest('SHA-256', pk).then(function(dg) {
+        var fp = b64url(new Uint8Array(dg));
+        return post('/api/ra/start', {public_key: b64(pk)}).then(function(r) {
+          if (r.error) throw new Error(r.error);
+          raState = {id: r.id, keys: {pub: kp.publicKey, priv: kp.privateKey}, fp: fp};
+          setMsg('qr-msg', 'waiting for gateway...');
+          raLoop();
+        });
+      });
+    });
+  }).catch(function(e) {
+    setMsg('qr-msg', 'start failed: ' + e.message, 'err');
+  }).then(function() {
+    $('btn-qr').disabled = false;
+  });
+};
+
+var captchaSitekey = null;
+var captchaRqdata = null;
+var captchaWidget = null;
+
+function loadCaptcha(sitekey, rqdata) {
+  captchaSitekey = sitekey;
+  captchaRqdata = rqdata || null;
+  $('cap').className = '';
+  $('cap').innerHTML = '<div id="cap-target"></div>';
+  if (window.hcaptcha) { renderCaptcha(); return; }
+  window.__onHCaptcha = renderCaptcha;
+  var s = document.createElement('script');
+  s.src = 'https://js.hcaptcha.com/1/api.js?render=explicit&onload=__onHCaptcha';
+  s.async = true;
+  document.head.appendChild(s);
+}
+function renderCaptcha() {
+  if (!window.hcaptcha || captchaWidget) return;
+  try {
+    captchaWidget = hcaptcha.render('cap-target', {sitekey: captchaSitekey});
+  } catch (e) {
+    setMsg('login-msg', 'captcha failed to load: ' + e.message, 'err');
+  }
+}
+
+function doLogin() {
+  var login = $('l-login').value;
+  var pass = $('l-pass').value;
+  var mfa = $('l-mfa').value;
+  var useMfa = !$('mfa-wrap').className.match(/hidden/);
+  var payload;
+
+  if (!login || (!pass && !useMfa)) { setMsg('login-msg', 'enter email and password', 'err'); return; }
+  setMsg('login-msg', 'signing in...');
+
+  if (useMfa) {
+    payload = {code: mfa, ticket: raState && raState.ticket ? raState.ticket : (window.__ticket || ''), sms: false, gift_code_sku_id: null};
+    post('/api/discord', {method:'POST', path:'/api/v9/auth/mfa/totp', body: JSON.stringify(payload)})
+      .then(mfaDone).catch(function(e){ setMsg('login-msg', String(e.message || e), 'err'); });
+    return;
+  }
+
+  payload = {login: login, password: pass, undelete: false, captcha_key: null, login_source: null, gift_code_sku_id: null};
+  if (captchaSitekey && window.hcaptcha && captchaWidget !== null) {
+    try { payload.captcha_key = hcaptcha.getResponse(captchaWidget); } catch (e) {}
+    if (captchaRqdata) payload.captcha_rqdata = captchaRqdata;
+  }
+  post('/api/discord', {method:'POST', path:'/api/v9/auth/login', body: JSON.stringify(payload)})
+    .then(loginDone)
+    .catch(function(e){ setMsg('login-msg', String(e.message || e), 'err'); });
+}
+
+function loginDone(r) {
+  if (r.error) { setMsg('login-msg', r.error, 'err'); return finishLogin(); }
+  var body;
+  try { body = JSON.parse(r.body); } catch (e) { setMsg('login-msg', 'bad response', 'err'); return finishLogin(); }
+  if (body.token) return saveToken(body.token, 'login-msg');
+  if (body.ticket && (body.mfa || r.status === 400)) {
+    window.__ticket = body.ticket;
+    $('mfa-wrap').className = '';
+    setMsg('login-msg', 'enter your 2fa code', '');
+    return finishLogin();
+  }
+  if (body.captcha_sitekey) {
+    loadCaptcha(body.captcha_sitekey, body.captcha_rqdata);
+    setMsg('login-msg', 'solve the captcha then sign in again', '');
+    return finishLogin();
+  }
+  setMsg('login-msg', body.message || ('login failed (' + r.status + ')'), 'err');
+  finishLogin();
+}
+
+function mfaDone(r) {
+  if (r.error) { setMsg('login-msg', r.error, 'err'); return finishLogin(); }
+  var body;
+  try { body = JSON.parse(r.body); } catch (e) { setMsg('login-msg', 'bad response', 'err'); return finishLogin(); }
+  if (body.token) return saveToken(body.token, 'login-msg');
+  setMsg('login-msg', body.message || ('2fa failed (' + r.status + ')'), 'err');
+  finishLogin();
+}
+
+function finishLogin() {
+  $('btn-login').disabled = false;
+}
+
+function saveToken(token, msgId) {
+  return post('/api/token', {token: token}).then(function(r) {
+    if (r.error) { setMsg(msgId, r.error, 'err'); return; }
+    setMsg(msgId, 'signed in. token stored.', 'good');
+    $('l-pass').value = '';
+    $('t-paste').value = '';
+    refreshStatus();
+  });
+}
+
+$('btn-login').onclick = function() {
+  $('btn-login').disabled = true;
+  doLogin();
+};
+
+$('btn-paste').onclick = function() {
+  var t = $('t-paste').value.trim();
+  if (t.length < 20) { setMsg('token-msg', 'that does not look like a token', 'err'); return; }
+  saveToken(t, 'token-msg');
+};
+
+$('btn-logout').onclick = function() {
+  post('/api/token/delete').then(function() {
+    setMsg('token-msg', 'token deleted', '');
+    refreshStatus();
+  });
+};
+
+refreshStatus();
+</script>
+</body>
+</html>
