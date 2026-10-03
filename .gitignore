@@ -6,3 +6,5 @@ tools/lib/
 *.kate-swp
 __pycache__/
 ps5-payload-sdk/
+config.ini
+token
