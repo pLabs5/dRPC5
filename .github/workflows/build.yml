@@ -56,6 +56,25 @@ jobs:
           makepkg -c -f
           sudo pacman --noconfirm -U ./ps5-payload-*.pkg.tar.gz
 
+      # third_party/curl and the mbedtls archives are committed binaries built
+      # with LLVM 21. lld 18 cannot read their objects ("Unknown attribute kind
+      # 102"), so point the SDK's compiler and linker at LLVM 21 instead.
+      - name: Use LLVM 21 for the SDK toolchain
+        run: |
+          set -euo pipefail
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 21
+          sudo apt-get install -y clang-21 lld-21
+          clang-21 --version | head -1
+          SDK=/opt/ps5-payload-sdk
+          for t in clang ld.lld lld; do
+            if [ -e "$SDK/bin/$t" ]; then
+              echo "repointing $SDK/bin/$t -> $(command -v ${t}-21)"
+              sudo ln -sf "$(command -v ${t}-21)" "$SDK/bin/$t"
+            fi
+          done
+
       - name: Fetch LibProsperoPKG
         run: |
           mkdir -p tools/lib
