@@ -12,3 +12,4 @@ dRPC5.elf
 # //--- secrets / config ---\\ #
 config.ini
 token
+dRPC5.elf.sha256
