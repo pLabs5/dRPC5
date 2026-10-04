@@ -61,7 +61,7 @@ jobs:
           mkdir -p tools/lib
           curl -fsSL -o /tmp/libprosperopkg.zip \
             https://github.com/SvenGDK/LibProsperoPKG/releases/download/v2.5/libprosperopkg-linux-x64.zip
-          unzip -q /tmp/libprosperopkg.zip -d tools/lib
+          unzip -oq /tmp/libprosperopkg.zip -d tools/lib
           LPP_SO="$(find tools/lib -name '*.so' | head -n1)"
           test -n "$LPP_SO"
           echo "LPP_LIB=$LPP_SO" >> "$GITHUB_ENV"
