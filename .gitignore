@@ -1,9 +1,14 @@
+# //--- build ---\\ #
 build/
+tools/send-payload
+ps5-payload-sdk/
 dist/
 *.o
-*.elf
+dRPC5.elf
+
+# //--- editor junk ---\\ #
 *.kate-swp
-__pycache__/
-ps5-payload-sdk/
+
+# //--- secrets / config ---\\ #
 config.ini
 token

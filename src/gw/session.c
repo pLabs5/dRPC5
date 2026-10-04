@@ -1,25 +1,4 @@
-#define _GNU_SOURCE
-#include "gw_internal.h"
-
-#include "core/config.h"
-#include "core/json.h"
-#include "core/util.h"
-#include "paths.h"
-#include "presence.h"
-#include "psn.h"
-
-#include <errno.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <pthread.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <time.h>
-#include <unistd.h>
-
+#include "gw_common.h"
 struct {
   pthread_mutex_t mu;
   pthread_t th;
@@ -106,7 +85,7 @@ static int session_once(const char *token, const char *resume_url,
   char hb_url[GW_URL_MAX];
   char hb_sid[128];
   long hb_seq = last_seq;
-  long hb_ms = GW_HB_FLOOR;
+  long hb_ms = 5000;
   long long next_hb;
   long long next_check;
   long long reidentify_at = 0;
@@ -143,7 +122,7 @@ static int session_once(const char *token, const char *resume_url,
     fcntl(fd, F_SETFL, fl | O_NONBLOCK);
   }
 
-  hb_ms = GW_HB_FLOOR;
+  hb_ms = (long)cfg_clamped("hb_min_ms", 5000, 1000, 60000);
   {
     long long jitter = (long long)hb_ms * (long long)(rng_next() % 1000) / 1000;
     next_hb = now_ms() + (jitter > 0 ? jitter : 1);
@@ -260,8 +239,9 @@ static int session_once(const char *token, const char *resume_url,
 
         if (op == 10) {
           long iv = frame_long(buf, "\"heartbeat_interval\":", 0);
+          long hb_floor = (long)cfg_clamped("hb_min_ms", 5000, 1000, 60000);
           if (iv > 0) hb_ms = iv;
-          if (hb_ms < GW_HB_FLOOR) hb_ms = GW_HB_FLOOR;
+          if (hb_ms < hb_floor) hb_ms = hb_floor;
           {
             long long jitter =
                 (long long)hb_ms * (long long)(rng_next() % 1000) / 1000;
@@ -321,7 +301,7 @@ static int session_once(const char *token, const char *resume_url,
           hb_url[0] = 0;
           hb_seq = -1;
           want_resume = 0;
-          reidentify_at = now_ms() + 150;
+          reidentify_at = now_ms() + cfg_clamped("reidentify_ms", 150, 0, 10000);
         } else if (op == 7) {
           rc = GW_RET_RETRY;
           break;
@@ -334,7 +314,7 @@ static int session_once(const char *token, const char *resume_url,
 
     now = now_ms();
     if (now < next_check) continue;
-    next_check = now + GW_CHECK_MS;
+    next_check = now + (long)cfg_clamped("poll_ms", 10000, 1000, 300000);
 
     {
       char status[32], mode[32], name[192], details[192], state[192];
@@ -342,7 +322,9 @@ static int session_once(const char *token, const char *resume_url,
       gw_activity act;
       char frame[GW_FRAME];
 
-      if (!g_time_known || now_ms() - g_time_synced_ms > 600000)
+      if (!g_time_known ||
+              now_ms() - g_time_synced_ms >
+                  cfg_clamped("resync_ms", 600000, 60000, 86400000))
         sync_time_offset();
 
       reload_config(status, sizeof(status), mode, sizeof(mode), name,

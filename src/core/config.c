@@ -2,6 +2,7 @@
 #include "config.h"
 
 #include "bundled_ca.h"
+#include "core/util.h"
 #include "paths.h"
 
 #include <stdio.h>
@@ -17,7 +18,8 @@ const char * kConfigKeys[] = {
     "name", "state", "details", "type",
     "asset_key", "asset_text", "asset_small_key", "asset_small_text",
     "start_timestamp", "end_timestamp", "platform",
-    "gw_os", "gw_browser", "gw_version", "gw_device", NULL};
+    "gw_os", "gw_browser", "gw_version", "gw_device",
+    "poll_ms", "hb_min_ms", "psn_retry_ms", "resync_ms", "reidentify_ms", NULL};
 
 void write_ca(void) {
   FILE *f;
@@ -31,7 +33,8 @@ const char *kConfigDefaults[] = {
     "1", "", "auto", "online",
     "1", "1", "0", "1", "", "1", "1",
     "", "", "", "0", "", "", "", "", "", "", "ps5",
-    "Playstation", "PS5 GameBase", "1.00", "PS5", NULL};
+    "Playstation", "PS5 GameBase", "1.00", "PS5",
+    "10000", "5000", "30000", "600000", "150", NULL};
 
 #define NCFG_DEFAULTS ((int)(sizeof(kConfigDefaults) / sizeof(kConfigDefaults[0])) - 1)
 const int kConfigDefaultsN = NCFG_DEFAULTS;
@@ -144,21 +147,31 @@ int cfg_bool(const char *key, int dflt) {
 
 long long cfg_int64(const char *key, long long dflt) {
   char buf[32];
+  char *end;
+  long long v;
   if (cfg_get(key, buf, sizeof(buf)) != 0 || buf[0] == 0) return dflt;
-  return atoll(buf);
+  v = strtoll(buf, &end, 10);
+  /* No digits at all: treat a typo'd value as unset so the caller gets the
+     documented default rather than whatever the clamp boundary happens to be. */
+  if (end == buf) return dflt;
+  return v;
+}
+
+long long cfg_clamped(const char *key, long long dflt, long long lo,
+                      long long hi) {
+  long long v = cfg_int64(key, dflt);
+  if (v < lo) return lo;
+  if (v > hi) return hi;
+  return v;
 }
 
 int read_token(char *out, size_t cap) {
-  FILE *f;
-  size_t n;
+  int n;
 
   if (cap == 0) return -1;
   out[0] = 0;
-  f = fopen(TOKEN_PATH, "rb");
-  if (!f) return -1;
-  n = fread(out, 1, cap - 1, f);
-  fclose(f);
-  out[n] = 0;
+  n = read_file_all(TOKEN_PATH, out, cap, NULL);
+  if (n < 0) return -1;
   while (n > 0 && (out[n - 1] == '\n' || out[n - 1] == '\r' || out[n - 1] == ' '))
     out[--n] = 0;
   return n >= 20 ? 0 : -1;

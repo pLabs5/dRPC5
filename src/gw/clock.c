@@ -1,25 +1,4 @@
-#define _GNU_SOURCE
-#include "gw_internal.h"
-
-#include "core/config.h"
-#include "core/json.h"
-#include "core/util.h"
-#include "paths.h"
-#include "presence.h"
-#include "psn.h"
-
-#include <errno.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <pthread.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <time.h>
-#include <unistd.h>
-
+#include "gw_common.h"
 long long g_time_off;
 int g_time_known;
 long long g_time_synced_ms;
@@ -82,13 +61,8 @@ void sync_time_offset(void) {
   curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(h, CURLOPT_HEADERFUNCTION, date_hdr_cb);
   curl_easy_setopt(h, CURLOPT_HEADERDATA, date);
-  curl_easy_setopt(h, CURLOPT_RESOLVE, pins);
-  curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
-  curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
-  curl_easy_setopt(h, CURLOPT_TIMEOUT_MS, 15000L);
-  curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 1L);
-  curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, 2L);
-  curl_easy_setopt(h, CURLOPT_CAINFO, CA_PATH);
+curl_easy_setopt(h, CURLOPT_RESOLVE, pins);
+    curl_setup(h, 10000L, 15000L);
 
   rc = curl_easy_perform(h);
   curl_easy_cleanup(h);

@@ -33,7 +33,6 @@ handle_status(int fd) {
   int gw_connected = 0;
   int gw_ready = 0;
   int gw_auth_failed = 0;
-  FILE *f;
 
   gateway_status(&gw_connected, &gw_ready, &gw_auth_failed, activity, sizeof(activity));
   lan_ip(ip, sizeof(ip));
@@ -47,11 +46,7 @@ handle_status(int fd) {
                           installed, DRPC_PORT, has_token, ip, gw_connected,
                           gw_ready, gw_auth_failed, activity);
   cfg[0] = 0;
-  if((f = fopen(CONFIG_PATH, "r")) != NULL) {
-    size_t n = fread(cfg, 1, sizeof(cfg) - 1, f);
-    cfg[n] = 0;
-    fclose(f);
-  }
+  read_file_all(CONFIG_PATH, cfg, sizeof(cfg), NULL);
   {
     int first = 1;
     int i;
@@ -82,11 +77,7 @@ handle_config(int fd, const char *body) {
   int i;
 
   cfg[0] = 0;
-  if((f = fopen(CONFIG_PATH, "r")) != NULL) {
-    size_t n = fread(cfg, 1, sizeof(cfg) - 1, f);
-    cfg[n] = 0;
-    fclose(f);
-  }
+  read_file_all(CONFIG_PATH, cfg, sizeof(cfg), NULL);
   mkdir(STORE_DIR, 0777);
   if((f = fopen(CONFIG_PATH, "w")) == NULL) {
     send_json(fd, 500, "{\"error\":\"cannot write config\"}");
@@ -376,13 +367,30 @@ handle_icon(int fd) {
   free(buf);
 }
 
+/* Reachable from the rest of the LAN: the PC page, and the one thing it is for -
+ * handing us a token. It also reads status to render the pills next to the token
+ * box. Everything else (config, presence, token deletion, remote auth, the
+ * console UI itself) is loopback-only. */
+static int lan_allowed(const char *method, const char *path) {
+  if(!strcmp(method, "POST")) return !strcmp(path, "/api/token");
+  if(strcmp(method, "GET")) return 0;
+  return !strcmp(path, "/pc.html") || !strcmp(path, "/token") ||
+         !strcmp(path, "/qrcode.js") || !strcmp(path, "/api/status");
+}
+
 void route(int fd, char *method, char *path, char *query, char *body) {
-  if(!strcmp(method, "GET") && (!strcmp(path, "/") || !strcmp(path, "/index.html") ||
-                                !strcmp(path, "/callback"))) {
-    if(strcmp(path, "/callback") && !peer_is_local(fd)) {
+  if(!peer_is_local(fd)) {
+    if(!strcmp(path, "/") || !strcmp(path, "/index.html")) {
       send_redirect(fd, "/pc.html");
       return;
     }
+    if(!lan_allowed(method, path)) {
+      send_json(fd, 403, "{\"error\":\"local only\"}");
+      return;
+    }
+  }
+  if(!strcmp(method, "GET") && (!strcmp(path, "/") || !strcmp(path, "/index.html") ||
+                                !strcmp(path, "/callback"))) {
     send_response(fd, 200, "OK", "text/html; charset=utf-8", kIndexHtml,
                   kIndexHtmlLen);
     return;
@@ -396,6 +404,31 @@ void route(int fd, char *method, char *path, char *query, char *body) {
   if(!strcmp(method, "GET") && !strcmp(path, "/qrcode.js")) {
     send_response(fd, 200, "OK", "application/javascript", kQrcodeJs,
                   kQrcodeJsLen);
+    return;
+  }
+  if(!strcmp(method, "GET") && !strcmp(path, "/style.css")) {
+    send_response(fd, 200, "OK", "text/css; charset=utf-8", kStyleCss,
+                  kStyleCssLen);
+    return;
+  }
+  if(!strcmp(method, "GET") && !strcmp(path, "/js/util.js")) {
+    send_response(fd, 200, "OK", "application/javascript", kJsUtil,
+                  kJsUtilLen);
+    return;
+  }
+  if(!strcmp(method, "GET") && !strcmp(path, "/js/app.js")) {
+    send_response(fd, 200, "OK", "application/javascript", kJsApp,
+                  kJsAppLen);
+    return;
+  }
+  if(!strcmp(method, "GET") && !strcmp(path, "/js/remote.js")) {
+    send_response(fd, 200, "OK", "application/javascript", kJsRemote,
+                  kJsRemoteLen);
+    return;
+  }
+  if(!strcmp(method, "GET") && !strcmp(path, "/js/signin.js")) {
+    send_response(fd, 200, "OK", "application/javascript", kJsSignin,
+                  kJsSigninLen);
     return;
   }
   if(!strcmp(method, "GET") && !strcmp(path, "/api/status")) {

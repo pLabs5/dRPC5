@@ -1,25 +1,4 @@
-#define _GNU_SOURCE
-#include "gw_internal.h"
-
-#include "core/config.h"
-#include "core/json.h"
-#include "core/util.h"
-#include "paths.h"
-#include "presence.h"
-#include "psn.h"
-
-#include <errno.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <pthread.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <time.h>
-#include <unistd.h>
-
+#include "gw_common.h"
 static void prop_str(const char *key, char *out, size_t cap,
                      const char *dflt) {
   if (cfg_get(key, out, cap) != 0 || out[0] == 0)
@@ -86,12 +65,8 @@ int connect_ws(CURL *easy, const char *url) {
 
   curl_easy_setopt(easy, CURLOPT_URL, url);
   curl_easy_setopt(easy, CURLOPT_HTTPHEADER, hdrs);
-  curl_easy_setopt(easy, CURLOPT_CONNECT_ONLY, 2L);
-  curl_easy_setopt(easy, CURLOPT_NOSIGNAL, 1L);
-  curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT_MS, 30000L);
-  curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 1L);
-  curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
-  curl_easy_setopt(easy, CURLOPT_CAINFO, CA_PATH);
+curl_easy_setopt(easy, CURLOPT_CONNECT_ONLY, 2L);
+    curl_setup(easy, 30000L, 0);
   err[0] = 0;
   curl_easy_setopt(easy, CURLOPT_ERRORBUFFER, err);
 

@@ -94,8 +94,9 @@ Verify, then [deploy](#deploying):
 sha256sum -c dRPC5.elf.sha256
 ```
 
-No Payload SDK, host compiler, `dist/` or `third_party/` needed. Unsigned, for
-your own console.
+No Payload SDK, `third_party/` or `dist/` needed. Deploying needs one small
+host program (`make send-payload`) and a C compiler — nothing else, and no
+cross-toolchain. Unsigned, for your own console.
 
 <details>
 <summary>Updating</summary>
@@ -149,17 +150,43 @@ NixOS that happily matches `openssl-*-dev/lib`, which contains headers but no
 
 ## Deploying
 
-The payload is sent to the console's ELF loader over TCP:
+Build the sender once — it replaces the SDK's `prospero-deploy`, which was just
+a shell wrapper around `socat`, so no networking tool is needed:
+
+```sh
+make send-payload
+```
+
+Then send the payload to the console's ELF loader over TCP:
 
 ```sh
 make deploy PS5_HOST=<ps5-ip> PS5_PORT=9021
 ```
 
-`prospero-deploy` shells out to `socat`. If you don't have it installed:
+`tools/send-payload` takes the same arguments (`-h`, `-p`, `-i`), also reads
+`PS5_HOST` and `PS5_PORT`, and runs standalone too:
 
 ```sh
-nix shell nixpkgs#socat -c make deploy PS5_HOST=192.168.1.159 PS5_PORT=9021
+tools/send-payload -h 192.168.1.159 -p 9021 dRPC5.elf
 ```
+
+## Network access
+
+The server listens on every interface at port `8642`, but only the PC page is
+reachable from outside the console:
+
+| Reachable on the LAN | Everything else → `403 local only` |
+|---|---|
+| `GET /pc.html`, `/token`, `/qrcode.js` | `GET /`, `/index.html`, `/callback` → redirect to `/pc.html` |
+| `GET /api/status` (read-only, powers the PC page's pills) | `/api/presence`, `/api/icon`, `/api/frame` |
+| `POST /api/token` | `POST /api/config`, `/api/token/delete`, `/api/discord` |
+| | `POST /api/ra/start`, `/api/ra/send`, `/api/ra/close` |
+| | `GET /api/ra/poll` |
+
+So a PC on your network can sign the console in, and nothing else. Holding the
+console's own config, presence and Remote Auth endpoints to `127.0.0.1` is what
+keeps anyone else on the network from rewriting your settings or reading your
+activity.
 
 ## Configuration
 
@@ -178,6 +205,20 @@ is optional.
 Setting `gw_os` to something else (`Android`, `Windows`, …) moves the session to
 that bucket instead. This is the knob to turn if console detection regresses
 after a Discord change.
+
+### Timing
+
+All intervals are milliseconds. Values are clamped to a safe range, and a value
+that is not a number falls back to the default, so a typo cannot stall or spin
+the gateway loop. Changes take effect on the next poll — no restart needed.
+
+| Key | Default | Range | Notes |
+|---|---|---|---|
+| `poll_ms` | `10000` | 1000–300000 | How often to re-read the foreground title and push a presence update. Lower reacts faster and costs more CPU and more gateway traffic; 10s is a good balance. |
+| `hb_min_ms` | `5000` | 1000–60000 | Floor applied to the gateway's own `heartbeat_interval`. Raise it if the console's clock is unreliable, lower it to follow the server more closely. |
+| `psn_retry_ms` | `30000` | 1000–3600000 | Backoff before retrying a PSN title or artwork lookup that failed. |
+| `resync_ms` | `600000` | 60000–86400000 | How often to re-sync the clock offset used for activity timestamps. |
+| `reidentify_ms` | `150` | 0–10000 | Delay before re-identifying with the gateway after it asks us to. |
 
 ### Activity source
 

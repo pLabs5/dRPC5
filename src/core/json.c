@@ -6,30 +6,7 @@
 #include <string.h>
 
 void json_copy(char *dst, size_t cap, const char *src) {
-  size_t o = 0;
-  if (!cap) return;
-  if (!src) src = "";
-  while (*src && o + 7 < cap) {
-    unsigned char c = (unsigned char)*src++;
-    if (c == '"' || c == '\\') {
-      dst[o++] = '\\';
-      dst[o++] = (char)c;
-    } else if (c == '\n') {
-      dst[o++] = '\\';
-      dst[o++] = 'n';
-    } else if (c == '\r') {
-      dst[o++] = '\\';
-      dst[o++] = 'r';
-    } else if (c == '\t') {
-      dst[o++] = '\\';
-      dst[o++] = 't';
-    } else if (c < 0x20) {
-      o += (size_t)snprintf(dst + o, cap - o, "\\u%04x", c);
-    } else {
-      dst[o++] = (char)c;
-    }
-  }
-  dst[o] = 0;
+  json_escape(dst, cap, src);
 }
 
 int frame_op(const char *frame, long *op) {
@@ -143,6 +120,7 @@ const char * json_obj(const char *frame, const char *key) {
 size_t json_escape(char *dst, size_t cap, const char *src) {
   size_t o = 0;
   if(!cap) return 0;
+  if(!src) src = "";
   while(*src && o + 7 < cap) {
     unsigned char c = (unsigned char)*src++;
     if(c == '"' || c == '\\') {

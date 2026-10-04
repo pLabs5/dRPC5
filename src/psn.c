@@ -2,6 +2,9 @@
 
 #include "psn.h"
 #include "curl_api.h"
+#include "core/config.h"
+#include "core/curlx.h"
+#include "core/util.h"
 #include "paths.h"
 
 #include <arpa/inet.h>
@@ -35,24 +38,6 @@ static char g_pending[16];
 static char g_last_try[16];
 static long long g_last_ms;
 static psn_proxy_fn g_proxy;
-
-static long long psn_now_ms(void) {
-  struct timespec ts;
-
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
-
-static size_t page_cb(char *ptr, size_t size, size_t nmemb, void *ud) {
-  char *buf = (char *)ud;
-  size_t want = size * nmemb;
-  size_t used = strlen(buf);
-
-  if (used + want >= PSN_PAGE) return 0;
-  memcpy(buf + used, ptr, want);
-  buf[used + want] = 0;
-  return want;
-}
 
 static int dns_skip_name(const unsigned char *r, size_t n, size_t *off) {
   while (*off < n) {
@@ -189,10 +174,11 @@ struct curl_slist *psn_pinned_hosts(void) {
 static int psn_get(const char *url, int head, long *code, char *ct,
                    size_t ctc, char *body) {
   struct curl_slist *hdrs = NULL;
-  struct curl_slist *pins;
-  CURL *h;
-  CURLcode rc;
-  long c = 0;
+struct curl_slist *pins;
+    CURL *h;
+    CURLcode rc;
+    long c = 0;
+    curlx_buf sink;
 
   if (code) *code = 0;
   if (ct && ctc) ct[0] = 0;
@@ -215,17 +201,14 @@ static int psn_get(const char *url, int head, long *code, char *ct,
   if (head)
     curl_easy_setopt(h, CURLOPT_NOBODY, 1L);
   else {
-    curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, page_cb);
-    curl_easy_setopt(h, CURLOPT_WRITEDATA, body);
+    sink.buf = body;
+    sink.cap = PSN_PAGE - 1;
+    curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, curlx_buf_cb);
+    curl_easy_setopt(h, CURLOPT_WRITEDATA, &sink);
   }
   curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
-  curl_easy_setopt(h, CURLOPT_MAXREDIRS, 5L);
-  curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
-  curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, 15000L);
-  curl_easy_setopt(h, CURLOPT_TIMEOUT_MS, 25000L);
-  curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 1L);
-  curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, 2L);
-  curl_easy_setopt(h, CURLOPT_CAINFO, CA_PATH);
+    curl_easy_setopt(h, CURLOPT_MAXREDIRS, 5L);
+    curl_setup(h, 15000L, 25000L);
 
   rc = curl_easy_perform(h);
   if (rc == CURLE_OK) {
@@ -486,10 +469,10 @@ void psn_art_refresh_async(const char *title_id, const char *concept_id,
 
   if (!title_id || !title_id[0]) return;
 
-  now = psn_now_ms();
+  now = mono_ms();
   pthread_mutex_lock(&g_mu);
   if (g_pending[0] || (g_last_try[0] && !strcmp(g_last_try, title_id) &&
-                       now - g_last_ms < PSN_RETRY_MS)) {
+                       now - g_last_ms < cfg_clamped("psn_retry_ms", 30000, 1000, 3600000))) {
     pthread_mutex_unlock(&g_mu);
     return;
   }

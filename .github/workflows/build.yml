@@ -74,12 +74,16 @@ jobs:
           ls -la dRPC5.elf dist/
           file dRPC5.elf dist/drpc5-tile.pkg || true
 
+      - name: Generate checksum
+        run: sha256sum dRPC5.elf > dRPC5.elf.sha256
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: drpc5
           path: |
             dRPC5.elf
+            dRPC5.elf.sha256
             dist/drpc5-tile.pkg
           if-no-files-found: error
 
@@ -102,4 +106,5 @@ jobs:
           generate_release_notes: true
           files: |
             dist/dRPC5.elf
+            dist/dRPC5.elf.sha256
             dist/drpc5-tile.pkg

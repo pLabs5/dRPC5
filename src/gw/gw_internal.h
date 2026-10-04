@@ -2,6 +2,7 @@
 
 #include "gateway.h"
 #include "curl_api.h"
+#include "core/curlx.h"
 
 #include <stddef.h>
 
@@ -11,8 +12,6 @@
 #define GW_FRAME     8192
 #define GW_MSG       (16u << 20)
 #define GW_URL_MAX   256
-#define GW_CHECK_MS  10000
-#define GW_HB_FLOOR  5000
 #define GW_BACKOFF_BASE 1000
 #define GW_BACKOFF_MAX  60000
 #define GW_BACKOFF_MAX_SHIFT 6

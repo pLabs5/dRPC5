@@ -3,6 +3,8 @@ extern int sceNetPoolCreate(const char*, int, int);
 
 #include "discord.h"
 #include "curl_api.h"
+#include "core/curlx.h"
+#include "core/util.h"
 #include "paths.h"
 
 #include <errno.h>
@@ -42,12 +44,6 @@ static int g_init_ok;
 
 int sceNetInit(void);
 
-static long long now_ms(void) {
-  struct timespec ts;
-  clock_gettime(CLOCK_REALTIME, &ts);
-  return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
-
 static void net_init_once(void) {
   int rc, pool;
 
@@ -71,17 +67,6 @@ int discord_init(void) {
   return g_init_ok ? 0 : -1;
 }
 
-static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *ud) {
-  char *buf = (char *)ud;
-  size_t want = size * nmemb;
-  size_t used = strlen(buf);
-  if (used + want > 32767)
-    return 0;
-  memcpy(buf + used, ptr, want);
-  buf[used + want] = 0;
-  return want;
-}
-
 int discord_http(const char *method, const char *path, const char *body,
                  struct curl_slist *extra, int *status, char *out,
                  size_t outcap) {
@@ -89,6 +74,7 @@ int discord_http(const char *method, const char *path, const char *body,
   struct curl_slist *hdrs = extra;
   char url[512];
   char *tmp;
+  curlx_buf sink;
   CURLcode rc;
   long code = 0;
 
@@ -134,15 +120,12 @@ int discord_http(const char *method, const char *path, const char *body,
     curl_easy_setopt(h, CURLOPT_POSTFIELDS, body);
     curl_easy_setopt(h, CURLOPT_POSTFIELDSIZE, (long)strlen(body));
   }
-  curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, write_cb);
-  curl_easy_setopt(h, CURLOPT_WRITEDATA, tmp);
-  curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
-  curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, 20000L);
-  curl_easy_setopt(h, CURLOPT_TIMEOUT_MS, 30000L);
-  curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 1L);
-  curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, 2L);
-  curl_easy_setopt(h, CURLOPT_CAINFO, CA_PATH);
-  curl_easy_setopt(h, CURLOPT_ACCEPT_ENCODING, "");
+sink.buf = tmp;
+    sink.cap = 32767;
+    curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, curlx_buf_cb);
+    curl_easy_setopt(h, CURLOPT_WRITEDATA, &sink);
+    curl_setup(h, 20000L, 30000L);
+    curl_easy_setopt(h, CURLOPT_ACCEPT_ENCODING, "");
 
   rc = curl_easy_perform(h);
   if (rc == CURLE_OK)
@@ -318,12 +301,8 @@ int ra_start(const char *public_key, char *err, size_t errcap) {
   curl_easy_setopt(h, CURLOPT_URL,
                    "wss://remote-auth-gateway.discord.gg/?v=2");
   curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs);
-  curl_easy_setopt(h, CURLOPT_CONNECT_ONLY, 2L);
-  curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
-  curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, 20000L);
-  curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 1L);
-  curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, 2L);
-  curl_easy_setopt(h, CURLOPT_CAINFO, CA_PATH);
+curl_easy_setopt(h, CURLOPT_CONNECT_ONLY, 2L);
+    curl_setup(h, 20000L, 0);
 
   curl_err[0] = 0;
   curl_easy_setopt(h, CURLOPT_ERRORBUFFER, curl_err);
@@ -397,14 +376,9 @@ int ra_poll(int id, long wait_ms, char *out, size_t cap, int *closed) {
 
   pthread_mutex_lock(&s->mu);
   if (s->count == 0 && s->running && wait_ms > 0) {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += wait_ms / 1000;
-    ts.tv_nsec += (wait_ms % 1000) * 1000000L;
-    if (ts.tv_nsec >= 1000000000L) {
-      ts.tv_sec++;
-      ts.tv_nsec -= 1000000000L;
-    }
+struct timespec ts;
+      clock_gettime(CLOCK_REALTIME, &ts);
+      ts_after_ms(&ts, wait_ms);
     while (s->count == 0 && s->running) {
       if (pthread_cond_timedwait(&s->cv, &s->mu, &ts) == ETIMEDOUT)
         break;

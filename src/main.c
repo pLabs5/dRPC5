@@ -13,20 +13,6 @@
 #include <unistd.h>
 
 static void *
-heartbeat(void *arg) {
-  (void)arg;
-  for(;;) {
-    FILE *f = fopen(STORE_DIR "/.hb", "wb");
-    if(f) {
-      fputc('1', f);
-      fclose(f);
-    }
-    sleep(1);
-  }
-  return NULL;
-}
-
-static void *
 net_main(void *arg) {
   (void)arg;
   printf("dRPC5: stage=discord_init\n");
@@ -54,12 +40,6 @@ main(int argc, char *argv[]) {
     }
   }
   notifyf("dRPC5 running - 127.0.0.1:%d", DRPC_PORT);
-
-  {
-    pthread_t hbt;
-    if(pthread_create(&hbt, NULL, heartbeat, NULL) == 0)
-      pthread_detach(hbt);
-  }
 
   printf("dRPC5: stage=install\n");
   install_tile();

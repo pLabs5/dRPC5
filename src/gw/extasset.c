@@ -1,39 +1,8 @@
-#define _GNU_SOURCE
-#include "gw_internal.h"
-
-#include "core/config.h"
-#include "core/json.h"
-#include "core/util.h"
-#include "paths.h"
-#include "presence.h"
-#include "psn.h"
-
-#include <errno.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <pthread.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <time.h>
-#include <unistd.h>
-
-static size_t http_body_cb(char *ptr, size_t size, size_t nmemb, void *ud) {
-  char *buf = (char *)ud;
-  size_t want = size * nmemb;
-  size_t used = strlen(buf);
-
-  if (used + want >= 4095) return 0;
-  memcpy(buf + used, ptr, want);
-  buf[used + want] = 0;
-  return want;
-}
-
+#include "gw_common.h"
 int proxy_external_asset(const char *url, char *out, size_t cap) {
   char token[TOKEN_MAX], app_id[32], ep[192], auth[TOKEN_MAX + 32];
   char body[700], esc[600], resp[4096];
+  curlx_buf sink;
   struct curl_slist *hdrs = NULL;
   struct curl_slist *pins;
   CURL *h;
@@ -85,15 +54,12 @@ int proxy_external_asset(const char *url, char *out, size_t cap) {
   curl_easy_setopt(h, CURLOPT_POSTFIELDS, body);
   curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs);
   curl_easy_setopt(h, CURLOPT_RESOLVE, pins);
-  curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, http_body_cb);
-  curl_easy_setopt(h, CURLOPT_WRITEDATA, resp);
-  curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
-  curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
-  curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, 15000L);
-  curl_easy_setopt(h, CURLOPT_TIMEOUT_MS, 25000L);
-  curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 1L);
-  curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, 2L);
-  curl_easy_setopt(h, CURLOPT_CAINFO, CA_PATH);
+  sink.buf = resp;
+  sink.cap = 4094;
+  curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, curlx_buf_cb);
+  curl_easy_setopt(h, CURLOPT_WRITEDATA, &sink);
+curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_setup(h, 15000L, 25000L);
 
   rc = curl_easy_perform(h);
   if (rc == CURLE_OK) curl_easy_getinfo(h, CURLINFO_RESPONSE_CODE, &code);

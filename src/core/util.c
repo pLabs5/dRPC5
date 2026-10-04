@@ -38,22 +38,46 @@ int read_whole_file(const char *path, char *buf, size_t cap) {
   return (int)n;
 }
 
+int read_file_all(const char *path, char *buf, size_t cap, size_t *out_len) {
+  FILE *f;
+  size_t n;
+
+  if(cap == 0) return -1;
+  f = fopen(path, "rb");
+  if(!f) return -1;
+  n = fread(buf, 1, cap - 1, f);
+  fclose(f);
+  buf[n] = 0;
+  if(out_len) *out_len = n;
+  return (int)n;
+}
+
 long long now_ms(void) {
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
   return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
+long long mono_ms(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+void ts_after_ms(struct timespec *ts, long ms) {
+  ts->tv_sec += ms / 1000;
+  ts->tv_nsec += (long)(ms % 1000) * 1000000L;
+  if (ts->tv_nsec >= 1000000000L) {
+    ts->tv_sec++;
+    ts->tv_nsec -= 1000000000L;
+  }
+}
+
 void nap_ms(int ms) {
   struct timespec ts;
   if (ms <= 0) return;
   clock_gettime(CLOCK_REALTIME, &ts);
-  ts.tv_sec += ms / 1000;
-  ts.tv_nsec += (long)(ms % 1000) * 1000000L;
-  if (ts.tv_nsec >= 1000000000L) {
-    ts.tv_sec++;
-    ts.tv_nsec -= 1000000000L;
-  }
+  ts_after_ms(&ts, ms);
   while (nanosleep(&ts, &ts) == -1 && errno == EINTR) {
   }
 }

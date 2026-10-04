@@ -2,7 +2,13 @@ SDK_CANDIDATES := $(PS5_PAYLOAD_SDK) $(CURDIR)/ps5-payload-sdk /opt/ps5-payload-
 SDK_MAKEFILE   := $(firstword $(foreach d,$(SDK_CANDIDATES),$(wildcard $(d)/toolchain/prospero.mk)))
 
 ifeq ($(SDK_MAKEFILE),)
+# send-payload is a plain host binary and needs no SDK, so only the targets that
+# actually cross-compile require one.
+ifneq ($(filter send-payload,$(MAKECMDGOALS)),)
+$(warning PS5 payload SDK not found: set PS5_PAYLOAD_SDK, or install it at ./ps5-payload-sdk or /opt/ps5-payload-sdk)
+else
 $(error PS5 payload SDK not found: set PS5_PAYLOAD_SDK, or install it at ./ps5-payload-sdk or /opt/ps5-payload-sdk)
+endif
 endif
 
 PS5_PAYLOAD_SDK := $(patsubst %/toolchain/prospero.mk,%,$(SDK_MAKEFILE))
@@ -42,14 +48,24 @@ PKG_VERSION := 01.00
 BUILD := build
 DIST  := dist
 
-CFLAGS := -Wall -Werror -g -DTITLE_ID=\"$(TITLE_ID)\" -Isrc
+# -Os + section GC keeps the payload small; -g0 drops debug info, which was
+# ~130KB of the deployed ELF. Override REL for a debug build: make REL=1
+REL ?= 0
+ifeq ($(REL),1)
+OPT := -O0 -g
+else
+OPT := -Os -g0 -ffunction-sections -fdata-sections
+endif
+
+CFLAGS := -Wall -Werror $(OPT) -DTITLE_ID=\"$(TITLE_ID)\" -Isrc
+LDFLAGS := $(if $(REL),,-Wl,--gc-sections)
 LDADD  := -lSceIpmi -lSceAppInstUtil -lSceUserService -lSceSystemService -lpthread
 
 PKGSRC   := $(BUILD)/bundled_tile_pkg.c
 WEBSRC   := $(BUILD)/web_assets.c
 CASRC    := $(BUILD)/bundled_ca.c
 PAYLOAD_SRCS := src/main.c src/install.c src/core/json.c src/core/config.c \
-                src/core/util.c src/http/server.c src/http/api.c \
+                src/core/util.c src/core/curlx.c src/http/server.c src/http/api.c \
                 src/gw/session.c src/gw/ws.c src/gw/activity.c \
                 src/gw/extasset.c src/gw/clock.c \
                 src/discord.c src/presence.c src/psn.c
@@ -66,7 +82,7 @@ CACERT      := $(THIRD_PARTY)/cacert.pem
 all: dRPC5.elf
 
 dRPC5.elf: $(PAYLOAD_SRCS) $(HEADERS) $(PKGSRC) $(WEBSRC) $(CASRC) $(CURL_LIBS)
-	$(CC) $(CFLAGS) -I$(BUILD) -I$(CURL_INC) -isystem $(THIRD_PARTY)/mbedtls/include -o $@ $(PAYLOAD_SRCS) $(PKGSRC) $(WEBSRC) $(CASRC) $(CURL_LIBS) $(LDADD)
+	$(CC) $(CFLAGS) $(LDFLAGS) -I$(BUILD) -I$(CURL_INC) -isystem $(THIRD_PARTY)/mbedtls/include -o $@ $(PAYLOAD_SRCS) $(PKGSRC) $(WEBSRC) $(CASRC) $(CURL_LIBS) $(LDADD)
 
 $(BUILD)/embed: tools/embed.c
 	mkdir -p $(BUILD)
@@ -76,14 +92,27 @@ $(BUILD)/mk_tile_pkg: tools/mk_tile_pkg.c
 	mkdir -p $(BUILD)
 	$(HOSTCC) $(HOSTCFLAGS) -o $@ $< -ldl
 
+SEND_PAYLOAD := tools/send-payload
+
+$(SEND_PAYLOAD): tools/deploy/send-payload.c
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ $<
+
 $(CASRC): $(CACERT) $(BUILD)/embed
 	$(BUILD)/embed --out $@ --dec kCaPem=$(CACERT):kCaPemSize
 
-$(WEBSRC): web/index.html web/pc.html web/vendor/qrcode.js $(BUILD)/embed
+WEBSRCS := web/index.html web/pc.html web/style.css web/vendor/qrcode.js \
+	web/js/util.js web/js/app.js web/js/remote.js web/js/signin.js
+
+$(WEBSRC): $(WEBSRCS) $(BUILD)/embed
 	$(BUILD)/embed --out $@ --hex --include stddef.h --check-nul \
 		kIndexHtml=web/index.html:kIndexHtmlLen \
 		kPcHtml=web/pc.html:kPcHtmlLen \
-		kQrcodeJs=web/vendor/qrcode.js:kQrcodeJsLen
+		kStyleCss=web/style.css:kStyleCssLen \
+		kQrcodeJs=web/vendor/qrcode.js:kQrcodeJsLen \
+		kJsUtil=web/js/util.js:kJsUtilLen \
+		kJsApp=web/js/app.js:kJsAppLen \
+		kJsRemote=web/js/remote.js:kJsRemoteLen \
+		kJsSignin=web/js/signin.js:kJsSigninLen
 
 $(PKGSRC): $(DIST)/drpc5-tile.pkg $(BUILD)/embed
 	$(BUILD)/embed --out $@ --dec kTilePkg=$(DIST)/drpc5-tile.pkg:kTilePkgSize:kTilePkgRawSize
@@ -113,10 +142,12 @@ $(BUILD)/tile-elf.o: src/eboot.c
 
 tile: $(DIST)/drpc5-tile.pkg
 
-deploy: dRPC5.elf
-	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
+deploy: dRPC5.elf $(SEND_PAYLOAD)
+	$(SEND_PAYLOAD) -h $(PS5_HOST) -p $(PS5_PORT) $<
+
+send-payload: $(SEND_PAYLOAD)
 
 clean:
 	rm -rf $(BUILD) $(DIST) dRPC5.elf
 
-.PHONY: all tile deploy clean
+.PHONY: all tile deploy send-payload clean

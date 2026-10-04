@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include "core/util.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,16 +50,7 @@ file_exists(const char *path) {
 
 static int
 read_file(const char *path, char *buf, size_t cap, size_t *out_len) {
-  FILE *f;
-  size_t n;
-
-  f = fopen(path, "rb");
-  if(!f) return -1;
-  n = fread(buf, 1, cap - 1, f);
-  fclose(f);
-  buf[n] = 0;
-  if(out_len) *out_len = n;
-  return n > 0 ? 0 : -1;
+  return read_file_all(path, buf, cap, out_len) > 0 ? 0 : -1;
 }
 
 static int
