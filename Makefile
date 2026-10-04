@@ -14,10 +14,13 @@ export LLVM_CONFIG
 # libprosperopkg.so is a .NET assembly; it must load an OpenSSL runtime matching the
 # one it was built against (3.5.x). Newer store paths exist but .NET rejects them
 # ("No usable version of libssl was found"), so prefer 3.5 explicitly.
-NIX_OPENSSL_LIB := $(firstword $(wildcard /nix/store/*openssl-3.5*/lib))
-ifeq ($(NIX_OPENSSL_LIB),)
-NIX_OPENSSL_LIB := $(firstword $(wildcard /nix/store/*openssl-3*/lib))
+# The wildcard also matches -dev outputs, which ship headers and no libssl.so, and
+# those sort first. Keep only directories that actually contain the runtime library.
+NIX_OPENSSL_DIRS := $(wildcard /nix/store/*openssl-3.5*/lib)
+ifeq ($(NIX_OPENSSL_DIRS),)
+NIX_OPENSSL_DIRS := $(wildcard /nix/store/*openssl-3*/lib)
 endif
+NIX_OPENSSL_LIB := $(firstword $(foreach d,$(NIX_OPENSSL_DIRS),$(if $(wildcard $(d)/libssl.so*),$(d))))
 ifneq ($(NIX_OPENSSL_LIB),)
 LPP_ENV := DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 LD_LIBRARY_PATH=$(NIX_OPENSSL_LIB)
 endif
@@ -26,7 +29,8 @@ endif
 PS5_HOST ?= ps5
 PS5_PORT ?= 9021
 
-PYTHON  ?= python3
+HOSTCC     ?= cc
+HOSTCFLAGS ?= -O2 -Wall -Wextra -Werror
 LPP_LIB ?= tools/lib/libprosperopkg.so
 LPP_ENV ?= DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
@@ -38,32 +42,54 @@ PKG_VERSION := 01.00
 BUILD := build
 DIST  := dist
 
-CFLAGS := -Wall -Werror -g -DTITLE_ID=\"$(TITLE_ID)\"
+CFLAGS := -Wall -Werror -g -DTITLE_ID=\"$(TITLE_ID)\" -Isrc
 LDADD  := -lSceIpmi -lSceAppInstUtil -lSceUserService -lSceSystemService -lpthread
 
 PKGSRC   := $(BUILD)/bundled_tile_pkg.c
 WEBSRC   := $(BUILD)/web_assets.c
-CURL_LIB := $(BUILD)/lib/libcurl.so
-PAYLOAD_SRCS := src/payload.c src/discord.c src/gateway.c src/presence.c
+CASRC    := $(BUILD)/bundled_ca.c
+PAYLOAD_SRCS := src/main.c src/install.c src/core/json.c src/core/config.c \
+                src/core/util.c src/http/server.c src/http/api.c \
+                src/gw/session.c src/gw/ws.c src/gw/activity.c \
+                src/gw/extasset.c src/gw/clock.c \
+                src/discord.c src/presence.c src/psn.c
+HEADERS  := $(wildcard src/*.h src/*/*.h)
+
+THIRD_PARTY := third_party
+CURL_INC    := $(THIRD_PARTY)/curl/include
+CURL_LIBS   := $(THIRD_PARTY)/curl/lib/libcurl.a \
+               $(THIRD_PARTY)/curl/lib/libmbedtls.a \
+               $(THIRD_PARTY)/curl/lib/libmbedx509.a \
+               $(THIRD_PARTY)/curl/lib/libmbedcrypto.a
+CACERT      := $(THIRD_PARTY)/cacert.pem
 
 all: dRPC5.elf
 
-dRPC5.elf: $(PAYLOAD_SRCS) src/bundled_tile_pkg.h src/curl_api.h src/discord.h src/gateway.h src/paths.h src/presence.h src/web.h $(PKGSRC) $(WEBSRC) $(CURL_LIB)
-	$(CC) $(CFLAGS) -I$(BUILD) -o $@ $(PAYLOAD_SRCS) $(PKGSRC) $(WEBSRC) -L$(BUILD)/lib -lcurl $(LDADD)
+dRPC5.elf: $(PAYLOAD_SRCS) $(HEADERS) $(PKGSRC) $(WEBSRC) $(CASRC) $(CURL_LIBS)
+	$(CC) $(CFLAGS) -I$(BUILD) -I$(CURL_INC) -isystem $(THIRD_PARTY)/mbedtls/include -o $@ $(PAYLOAD_SRCS) $(PKGSRC) $(WEBSRC) $(CASRC) $(CURL_LIBS) $(LDADD)
 
-$(CURL_LIB): src/libcurl_stubs.c
-	mkdir -p $(BUILD)/lib
-	$(CC) $(CFLAGS) -fPIC -c -o $(BUILD)/libcurl_stubs.o $<
-	$(LD) --shared -soname libcurl.sprx -o $@ $(BUILD)/libcurl_stubs.o
+$(BUILD)/embed: tools/embed.c
+	mkdir -p $(BUILD)
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ $<
 
-$(WEBSRC): web/index.html web/vendor/qrcode.js tools/gen_web.py
-	$(PYTHON) tools/gen_web.py --html web/index.html --qrcode web/vendor/qrcode.js --out $@
+$(BUILD)/mk_tile_pkg: tools/mk_tile_pkg.c
+	mkdir -p $(BUILD)
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ $< -ldl
 
-$(PKGSRC): $(DIST)/drpc5-tile.pkg tools/gen_tile_pkg.py
-	$(PYTHON) tools/gen_tile_pkg.py --pkg $< --out $@
+$(CASRC): $(CACERT) $(BUILD)/embed
+	$(BUILD)/embed --out $@ --dec kCaPem=$(CACERT):kCaPemSize
 
-$(DIST)/drpc5-tile.pkg: $(BUILD)/homebrew/eboot.bin tile/sce_sys/param.json tile/sce_sys/icon0.png tools/mk_tile_pkg.py
-	$(LPP_ENV) $(PYTHON) tools/mk_tile_pkg.py \
+$(WEBSRC): web/index.html web/pc.html web/vendor/qrcode.js $(BUILD)/embed
+	$(BUILD)/embed --out $@ --hex --include stddef.h --check-nul \
+		kIndexHtml=web/index.html:kIndexHtmlLen \
+		kPcHtml=web/pc.html:kPcHtmlLen \
+		kQrcodeJs=web/vendor/qrcode.js:kQrcodeJsLen
+
+$(PKGSRC): $(DIST)/drpc5-tile.pkg $(BUILD)/embed
+	$(BUILD)/embed --out $@ --dec kTilePkg=$(DIST)/drpc5-tile.pkg:kTilePkgSize:kTilePkgRawSize
+
+$(DIST)/drpc5-tile.pkg: $(BUILD)/homebrew/eboot.bin tile/sce_sys/param.json tile/sce_sys/icon0.png $(BUILD)/mk_tile_pkg
+	$(LPP_ENV) $(BUILD)/mk_tile_pkg \
 		--lib $(LPP_LIB) \
 		--homebrew $(BUILD)/homebrew \
 		--out-pkg $@ \
@@ -77,8 +103,6 @@ $(BUILD)/homebrew/eboot.bin: $(BUILD)/tile-elf tile/sce_sys/param.json tile/sce_
 	cp tile/sce_sys/param.json $(BUILD)/homebrew/sce_sys/param.json
 	cp tile/sce_sys/icon0.png $(BUILD)/homebrew/sce_sys/icon0.png
 
-tile/sce_sys/icon0.png: tools/gen_icon.py
-	$(PYTHON) tools/gen_icon.py --out $@
 
 $(BUILD)/tile-elf: $(BUILD)/tile-elf.o src/eboot.x
 	$(LD) --static -T src/eboot.x -o $@ $(BUILD)/tile-elf.o

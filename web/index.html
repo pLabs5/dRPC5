@@ -6,58 +6,204 @@
 <title>dRPC5</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0c0d13;
+  --surface: #171a25;
+  --surface2: #1f2333;
+  --line: #2c3145;
+  --text: #e8eaf3;
+  --dim: #9299b3;
+  --acc: #5865f2;
+  --acc2: #7c86ff;
+  --ok: #57f287;
+  --bad: #ff7b7b;
+}
+html { -webkit-text-size-adjust: 100%; }
 body {
-  background: #12131a; color: #e3e5ef; font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  padding: 16px; max-width: 720px; margin: 0 auto;
+  background:
+    radial-gradient(1100px 460px at 50% -12%, #1c2144 0%, transparent 62%),
+    var(--bg);
+  color: var(--text);
+  font: 17px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding: 22px 20px 60px; max-width: 900px; margin: 0 auto;
+  -webkit-tap-highlight-color: transparent;
 }
-h1 { font-size: 22px; margin-bottom: 4px; color: #fff; }
-h1 span { color: #5865f2; }
-h2 { font-size: 16px; margin: 18px 0 8px; color: #c8cad6; }
-.sub { color: #8b8f9e; font-size: 13px; margin-bottom: 14px; }
-.bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-.pill { background: #1d1f29; border: 1px solid #2c2f3d; border-radius: 999px; padding: 4px 12px; font-size: 12px; color: #9fa3b4; }
-.pill.ok { border-color: #3ba55d; color: #57f287; }
-.pill.bad { border-color: #ed4245; color: #ff7b7b; }
-.tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+h1 { font-size: 27px; font-weight: 800; letter-spacing: -.5px; color: #fff; }
+h1 span { color: var(--acc2); }
+h2 {
+  font-size: 12px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--dim); margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.sub { color: var(--dim); font-size: 15px; margin-top: 3px; }
+
+.topbar { display: flex; flex-wrap: wrap; gap: 9px; margin: 16px 0 18px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: 8px 15px; font-size: 14px; font-weight: 600; color: var(--dim);
+}
+.pill::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%;
+  background: #4a5068; flex: none;
+}
+.pill.ok { color: var(--ok); border-color: #2f6b47; background: #14261d; }
+.pill.ok::before { background: var(--ok); box-shadow: 0 0 9px var(--ok); }
+.pill.bad { color: var(--bad); border-color: #6b2f33; background: #261416; }
+.pill.bad::before { background: var(--bad); box-shadow: 0 0 9px var(--bad); }
+
+.tabs { display: flex; gap: 10px; margin-bottom: 20px; }
 .tabs button {
-  flex: 1; padding: 10px; background: #1d1f29; color: #9fa3b4; border: 1px solid #2c2f3d;
-  border-radius: 8px; font-size: 14px; cursor: pointer;
+  flex: 1; min-height: 56px; padding: 12px 16px;
+  background: var(--surface); color: var(--dim);
+  border: 2px solid var(--line); border-radius: 14px;
+  font-size: 17px; font-weight: 700; cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
 }
-.tabs button.active { background: #5865f2; color: #fff; border-color: #5865f2; }
-.card { background: #191b24; border: 1px solid #262937; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
-label { display: block; font-size: 12px; color: #8b8f9e; margin: 10px 0 4px; }
+.tabs button:hover { background: var(--surface2); color: var(--text); }
+.tabs button.active { background: var(--acc); border-color: var(--acc); color: #fff; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 18px; padding: 22px; margin-bottom: 18px;
+}
+.card h3 { font-size: 19px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+.card .hint:first-child { margin-top: 0; }
+.card.lead {
+  border-color: var(--acc);
+  box-shadow: 0 6px 26px rgba(88, 101, 242, .16);
+  background: linear-gradient(180deg, #1b1f35 0%, var(--surface) 46%);
+}
+details.alt {
+  border: 1px dashed var(--line); border-radius: 18px;
+  padding: 0 16px; margin-bottom: 18px;
+}
+details.alt summary {
+  cursor: pointer; padding: 17px 6px; font-size: 15px;
+  font-weight: 700; color: var(--dim); list-style: none;
+}
+details.alt summary::-webkit-details-marker { display: none; }
+details.alt summary:hover { color: var(--text); }
+details.alt summary::before { content: "+ "; font-weight: 800; }
+details.alt[open] summary { color: var(--text); border-bottom: 1px solid var(--line); }
+details.alt[open] summary::before { content: "\2212  "; }
+details.alt .card { background: var(--surface2); }
+details.alt .card:last-child { margin-bottom: 16px; }
+.urlbox { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; margin-top: 14px; }
+.urlbox-btn {
+  display: inline-flex; align-items: center; padding: 0 16px;
+  border-radius: 12px; background: var(--surface2);
+  border: 2px dashed var(--line); color: var(--dim);
+  font-size: 15px; font-weight: 700; cursor: not-allowed;
+  white-space: nowrap;
+}
+.urlbox-url {
+  flex: 1; min-width: 260px; display: flex; align-items: center;
+  padding: 11px 14px; border-radius: 12px;
+  background: var(--bg); border: 1px solid var(--line);
+  color: var(--acc2); font-size: 15px; font-weight: 600;
+  -webkit-user-select: all; user-select: all; word-break: break-all;
+}
+
+label, .lbl {
+  display: block; font-size: 13px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--dim); margin: 16px 0 7px;
+}
+label.plain { text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 600; color: var(--text); }
 input[type=text], input[type=password], input[type=number], select, textarea {
-  width: 100%; padding: 9px 10px; background: #12131a; color: #e3e5ef;
-  border: 1px solid #2c2f3d; border-radius: 8px; font-size: 14px;
+  width: 100%; min-height: 54px; padding: 13px 15px;
+  background: var(--bg); color: var(--text);
+  border: 2px solid var(--line); border-radius: 12px;
+  font-size: 17px; font-family: inherit;
 }
-.row { display: flex; gap: 10px; }
-.row > div { flex: 1; }
+textarea { min-height: 96px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--acc); background: #0f111a;
+}
+select {
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--dim) 50%),
+                    linear-gradient(135deg, var(--dim) 50%, transparent 50%);
+  background-position: calc(100% - 22px) 24px, calc(100% - 15px) 24px;
+  background-size: 7px 7px, 7px 7px;
+  background-repeat: no-repeat;
+  padding-right: 44px;
+}
+::placeholder { color: #5d647d; }
+
+.row { display: flex; gap: 14px; }
+.row > div { flex: 1; min-width: 0; }
+@media (max-width: 620px) { .row { flex-direction: column; gap: 0; } }
+
+.seg {
+  display: flex; gap: 8px; background: var(--bg);
+  border: 2px solid var(--line); border-radius: 12px; padding: 6px;
+}
+.seg button {
+  flex: 1; min-height: 46px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--dim);
+  font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.seg button:hover { color: var(--text); }
+.seg button.active { background: var(--acc); color: #fff; }
+
+#c-mode { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 11px; }
+.chip { position: relative; display: block; cursor: pointer; margin: 0; text-transform: none; letter-spacing: normal; }
+.chip input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.chip span {
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  min-height: 56px; padding: 10px 14px; border-radius: 14px;
+  background: var(--surface2); border: 2px solid var(--line);
+  color: var(--dim); font-size: 16px; font-weight: 700;
+  transition: background .12s, border-color .12s, color .12s, transform .08s;
+}
+.chip:hover span { border-color: #3d4460; color: var(--text); }
+.chip:active span { transform: scale(.97); }
+.chip input:checked + span {
+  background: var(--acc); border-color: var(--acc); color: #fff;
+  box-shadow: 0 4px 18px rgba(88, 101, 242, .35);
+}
+.chip input:focus-visible + span { outline: 3px solid #fff; outline-offset: 3px; }
+
 button.act {
-  margin-top: 14px; width: 100%; padding: 11px; background: #5865f2; color: #fff;
-  border: 0; border-radius: 8px; font-size: 15px; cursor: pointer;
+  display: block; width: 100%; min-height: 56px; margin-top: 20px;
+  background: var(--acc); color: #fff; border: 0; border-radius: 14px;
+  font-size: 17px; font-weight: 700; cursor: pointer;
+  transition: filter .12s, transform .08s;
 }
-button.act.secondary { background: #2c2f3d; }
-button.act.danger { background: #a12f34; }
-button.act:disabled { opacity: .5; }
-.hint { font-size: 12px; color: #8b8f9e; margin-top: 8px; }
-.msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
-.msg.err { color: #ff7b7b; }
-.msg.good { color: #57f287; }
-#qrbox { text-align: center; margin-top: 12px; }
-#qrbox img { background: #fff; padding: 8px; border-radius: 8px; }
-#cap { margin-top: 10px; }
-.hidden { display: none; }
-a { color: #5865f2; }
+button.act:hover { filter: brightness(1.1); }
+button.act:active { transform: scale(.985); }
+button.act.secondary { background: var(--surface2); border: 2px solid var(--line); color: var(--text); }
+button.act.danger { background: #8f2b30; }
+button.act:disabled { opacity: .45; cursor: default; }
+
+.hint { font-size: 14px; color: var(--dim); margin-top: 10px; line-height: 1.5; }
+.msg { font-size: 15px; font-weight: 600; margin-top: 12px; min-height: 21px; }
+.msg.err { color: var(--bad); }
+.msg.good { color: var(--ok); }
+
+#qrbox { text-align: center; margin-top: 16px; }
+#qrbox img { background: #fff; padding: 10px; border-radius: 12px; }
+#cap, #qrcap { margin-top: 14px; }
+.hidden { display: none !important; }
+a { color: var(--acc2); }
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  padding: 1px 6px; font-size: .92em; color: #ffb86c;
+}
+hr.sep { border: 0; border-top: 1px solid var(--line); margin: 20px 0 0; }
 </style>
 </head>
 <body>
 <h1>dRPC5 <span>rich presence</span></h1>
 <div class="sub">runs entirely on your ps5. no pc, no bridge.</div>
-<div class="bar">
+<div class="topbar">
   <span class="pill" id="p-installed">tile: ?</span>
   <span class="pill" id="p-token">sign-in: ?</span>
-  <span class="pill" id="p-net">server: ok</span>
   <span class="pill" id="p-gw">presence: ?</span>
+  <span class="pill" id="p-net">server: ok</span>
 </div>
 
 <div class="tabs">
@@ -67,30 +213,52 @@ a { color: #5865f2; }
 
 <div id="view-cfg">
   <div class="card">
-    <h2>presence mode</h2>
+    <h2>what to publish</h2>
     <div class="row">
-      <div><label>source</label>
+      <div>
+        <label>source</label>
+        <div class="seg">
+          <button type="button" id="m-auto" class="active">auto detect</button>
+          <button type="button" id="m-manual">manual</button>
+        </div>
         <select id="c-mode">
           <option value="auto">auto - detect the running game</option>
           <option value="manual">manual - use the fields below</option>
         </select>
       </div>
-      <div><label>media line</label><input type="text" id="c-media_line" placeholder="Listening to Spotify"></div>
+      <div>
+        <label>status</label>
+        <select id="c-status">
+          <option value="online">online</option>
+          <option value="dnd">do not disturb</option>
+          <option value="idle">idle</option>
+          <option value="invisible">invisible</option>
+        </select>
+      </div>
     </div>
-    <label>application (client) id</label>
-    <input type="text" id="c-app_id" placeholder="1234567890123456789">
-    <h2>publish</h2>
-    <label><input type="checkbox" id="c-src_game" style="width:auto"> games</label>
-    <label><input type="checkbox" id="c-src_media" style="width:auto"> media apps</label>
-    <label><input type="checkbox" id="c-src_app" style="width:auto"> other apps</label>
-    <label><input type="checkbox" id="c-src_idle" style="width:auto"> idle / no game</label>
+
+    <label>publish</label>
+    <div class="chips">
+      <label class="chip"><input type="checkbox" id="c-src_game"><span>games</span></label>
+      <label class="chip"><input type="checkbox" id="c-src_media"><span>media apps</span></label>
+      <label class="chip"><input type="checkbox" id="c-src_app"><span>other apps</span></label>
+      <label class="chip"><input type="checkbox" id="c-src_idle"><span>idle / no game</span></label>
+      <label class="chip"><input type="checkbox" id="c-show_artwork"><span>artwork</span></label>
+      <label class="chip"><input type="checkbox" id="c-show_platform"><span>platform line</span></label>
+      <label class="chip"><input type="checkbox" id="c-enabled"><span>presence on</span></label>
+    </div>
+
     <div class="row">
-      <div><label><input type="checkbox" id="c-show_artwork" style="width:auto"> show artwork</label></div>
-      <div><label><input type="checkbox" id="c-show_platform" style="width:auto"> show platform line</label></div>
+      <div><label>media line</label><input type="text" id="c-media_line" placeholder="Listening to Spotify"></div>
+      <div><label>application (client) id</label><input type="text" id="c-app_id" placeholder="1234567890123456789"></div>
     </div>
+
+    <button class="act" id="btn-save">save config</button>
+    <div class="msg" id="cfg-msg"></div>
     <div class="msg" id="gw-state">presence: waiting</div>
   </div>
-  <div class="card" id="manual-card">
+
+  <div class="card hidden" id="manual-card">
     <h2>activity (manual mode)</h2>
     <div class="row">
       <div><label>name</label><input type="text" id="c-name" placeholder="playing something"></div>
@@ -108,7 +276,7 @@ a { color: #5865f2; }
       <div><label>state</label><input type="text" id="c-state" placeholder="in a match"></div>
       <div><label>details</label><input type="text" id="c-details" placeholder="round 3"></div>
     </div>
-    <h2>assets</h2>
+    <h2 style="margin-top:26px">assets</h2>
     <div class="row">
       <div><label>large image key</label><input type="text" id="c-asset_key"></div>
       <div><label>large image text</label><input type="text" id="c-asset_text"></div>
@@ -117,55 +285,60 @@ a { color: #5865f2; }
       <div><label>small image key</label><input type="text" id="c-asset_small_key"></div>
       <div><label>small image text</label><input type="text" id="c-asset_small_text"></div>
     </div>
-    <h2>timing &amp; status</h2>
+    <h2 style="margin-top:26px">timing</h2>
     <div class="row">
       <div><label>start timestamp (unix s)</label><input type="number" id="c-start_timestamp"></div>
       <div><label>end timestamp (unix s)</label><input type="number" id="c-end_timestamp"></div>
     </div>
-    <label>status</label>
-    <select id="c-status">
-      <option value="online">online</option>
-      <option value="dnd">do not disturb</option>
-      <option value="idle">idle</option>
-      <option value="invisible">invisible</option>
-    </select>
-    <label><input type="checkbox" id="c-enabled" style="width:auto"> enabled</label>
-    <button class="act" id="btn-save">save config</button>
-    <div class="msg" id="cfg-msg"></div>
   </div>
 </div>
 
 <div id="view-sign" class="hidden">
-  <div class="card">
-    <h2>sign in with qr</h2>
-    <div class="hint">open discord on your phone, settings &rarr; link with other devices, then scan this. no password ever touches the ps5.</div>
-    <button class="act" id="btn-qr">generate qr</button>
-    <div id="qrbox"></div>
-    <div class="msg" id="qr-msg"></div>
-  </div>
-  <div class="card">
-    <h2>sign in with email</h2>
-    <label>email or username</label>
-    <input type="text" id="l-login" autocomplete="off">
-    <label>password</label>
-    <input type="password" id="l-pass">
-    <div id="mfa-wrap" class="hidden">
-      <label>2fa code</label>
-      <input type="text" id="l-mfa" inputmode="numeric" autocomplete="one-time-code">
+  <div class="card lead">
+    <h2>sign in with user token</h2>
+    <div class="hint">the main way to sign in: paste your discord <b>user</b> token. an oauth access token (from an "authorize" button) is rejected by the gateway - only a raw user token works.</div>
+    <div class="hint">don't have one? on your <b>pc</b>, open the token helper page - it prints your token and copies it to the clipboard for you. (devtools on a phone is iffy.)</div>
+    <div class="urlbox">
+      <span class="urlbox-btn" aria-disabled="true">token helper page</span>
+      <code class="urlbox-url" id="pc-url">http://…:8642/pc.html</code>
     </div>
-    <div id="cap" class="hidden"></div>
-    <button class="act" id="btn-login">sign in</button>
-    <div class="msg" id="login-msg"></div>
-    <div class="hint">captcha may appear above if discord asks for one. if it won't load, use qr or paste a token instead.</div>
-  </div>
-  <div class="card">
-    <h2>paste token</h2>
-    <div class="hint">grab your token from discord's devtools on any device and paste it here.</div>
-    <input type="password" id="t-paste" placeholder="user token">
-    <button class="act secondary" id="btn-paste">save token</button>
+    <input type="password" id="t-paste" placeholder="user token" spellcheck="false" autocomplete="off">
+    <button class="act" id="btn-paste">save token</button>
     <div class="msg" id="token-msg"></div>
     <button class="act danger hidden" id="btn-logout">sign out (delete token)</button>
   </div>
+  <details class="alt">
+    <summary>other sign-in methods (discord login &middot; qr &middot; email)</summary>
+    <div class="card">
+      <h2>sign in with discord</h2>
+      <div class="hint">opens discord's own login page in the ps5 browser. because that page runs on discord.com, captcha works there natively. discord then redirects the token back to this app.</div>
+      <button class="act" id="btn-oauth">open discord login</button>
+      <div class="msg" id="oauth-msg"></div>
+    </div>
+    <div class="card">
+      <h2>sign in with qr</h2>
+      <div class="hint">open discord on your phone, settings &rarr; link with other devices, then scan this. no password ever touches the ps5.</div>
+      <button class="act" id="btn-qr">generate qr</button>
+      <div id="qrbox"></div>
+      <div id="qrcap" class="hidden"></div>
+      <div class="msg" id="qr-msg"></div>
+    </div>
+    <div class="card">
+      <h2>sign in with email</h2>
+      <label>email or username</label>
+      <input type="text" id="l-login" autocomplete="off">
+      <label>password</label>
+      <input type="password" id="l-pass">
+      <div id="mfa-wrap" class="hidden">
+        <label>2fa code</label>
+        <input type="text" id="l-mfa" inputmode="numeric" autocomplete="one-time-code">
+      </div>
+      <div id="cap" class="hidden"></div>
+      <button class="act" id="btn-login">sign in</button>
+      <div class="msg" id="login-msg"></div>
+      <div class="hint">captcha may appear above if discord asks for one. if it won't load, paste a token instead.</div>
+    </div>
+  </details>
 </div>
 
 <script src="/qrcode.js"></script>
@@ -219,6 +392,11 @@ function cryptoOk() {
   return !!(window.crypto && crypto.subtle && crypto.subtle.encrypt);
 }
 
+function cfgFocused() {
+  var a = document.activeElement;
+  return !!(a && a.id && a.id.indexOf('c-') === 0);
+}
+
 function refreshStatus() {
   return api('/api/status').then(function(s) {
     status = s;
@@ -227,13 +405,17 @@ function refreshStatus() {
     $('p-token').textContent = 'sign-in: ' + (s.has_token ? 'ready' : 'none');
     $('p-token').className = 'pill ' + (s.has_token ? 'ok' : '');
     $('btn-logout').className = 'act danger' + (s.has_token ? '' : ' hidden');
+    var host = (s.ip && s.ip !== '?') ? s.ip : location.hostname;
+    if (host) $('pc-url').textContent = 'http://' + host + ':' + (s.port || 8642) + '/pc.html';
     renderGateway(s.gateway);
     if (s.config) {
-      for (var k in s.config) {
-        var el = $('c-' + k);
-        if (!el) continue;
-        if (el.type === 'checkbox') el.checked = s.config[k] === '1' || s.config[k] === 'true';
-        else el.value = s.config[k];
+      if (!cfgFocused() && !saveTimer) {
+        for (var k in s.config) {
+          var el = $('c-' + k);
+          if (!el) continue;
+          if (el.type === 'checkbox') el.checked = s.config[k] === '1' || s.config[k] === 'true';
+          else el.value = s.config[k];
+        }
       }
       applyMode();
     }
@@ -244,6 +426,8 @@ function applyMode() {
   var mode = $('c-mode') ? $('c-mode').value : 'auto';
   var card = $('manual-card');
   if (card) card.className = mode === 'manual' ? 'card' : 'card hidden';
+  if ($('m-auto')) $('m-auto').className = mode === 'auto' ? 'active' : '';
+  if ($('m-manual')) $('m-manual').className = mode === 'manual' ? 'active' : '';
 }
 
 function renderGateway(g) {
@@ -274,6 +458,8 @@ function renderGateway(g) {
 }
 
 $('c-mode').onchange = applyMode;
+$('m-auto').onclick = function() { $('c-mode').value = 'auto'; applyMode(); autoSave(); };
+$('m-manual').onclick = function() { $('c-mode').value = 'manual'; applyMode(); autoSave(); };
 
 function collectConfig() {
   var keys = ['app_id','name','type','state','details','asset_key','asset_text',
@@ -290,11 +476,41 @@ function collectConfig() {
   return obj;
 }
 
+function clockStr() {
+  var d = new Date();
+  function p(n) { return (n < 10 ? '0' : '') + n; }
+  return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+
+function pushConfig() {
+  return post('/api/config', collectConfig()).then(function(r) {
+    setMsg('cfg-msg', r.error ? r.error : 'saved ' + clockStr(),
+           r.error ? 'err' : 'good');
+    return r;
+  }).catch(function(e) {
+    setMsg('cfg-msg', 'save failed: ' + e.message, 'err');
+    return { error: e.message };
+  });
+}
+
+var saveTimer = null;
+function autoSave() {
+  setMsg('cfg-msg', 'saving...', '');
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(function() { saveTimer = null; pushConfig(); }, 600);
+}
+
+Array.prototype.forEach.call(
+  document.querySelectorAll('#view-cfg input, #view-cfg select'),
+  function(el) {
+    el.addEventListener('input', autoSave);
+    el.addEventListener('change', autoSave);
+  }
+);
+
 $('btn-save').onclick = function() {
   setMsg('cfg-msg', 'saving...');
-  post('/api/config', collectConfig()).then(function(r) {
-    setMsg('cfg-msg', r.error ? r.error : 'saved', r.error ? 'err' : 'good');
-  }).catch(function(e){ setMsg('cfg-msg', 'save failed', 'err'); });
+  pushConfig();
 };
 
 function showTab(which) {
@@ -346,30 +562,13 @@ function handleRa(frame) {
     return;
   }
   if (op === 'pending_login') {
+    var ticket = d.ticket || (d.d && d.d.ticket);
+    if (!ticket) {
+      setMsg('qr-msg', 'no ticket in pending_login: ' + frame, 'err');
+      return;
+    }
     setMsg('qr-msg', 'exchanging login...');
-    post('/api/discord', {
-      method: 'POST',
-      path: '/api/v9/users/@me/remote-auth/login',
-      body: JSON.stringify({ticket: d.ticket})
-    }).then(function(r) {
-      if (r.error) throw new Error(r.error);
-      var body = JSON.parse(r.body);
-      if (!body.encrypted_token) throw new Error('no encrypted token (' + r.status + ')');
-      return raState.keys.priv.decrypt(
-        {name:'RSA-OAEP'},
-        b64urlDecode(body.encrypted_token));
-    }).then(function(buf) {
-      var token = bytesToText(new Uint8Array(buf));
-      return post('/api/token', {token: token});
-    }).then(function(r) {
-      if (r.error) throw new Error(r.error);
-      setMsg('qr-msg', 'signed in. token stored.', 'good');
-      $('qrbox').innerHTML = '';
-      refreshStatus();
-      if (raState) { post('/api/ra/close', {id: raState.id}); raState = null; }
-    }).catch(function(e) {
-      setMsg('qr-msg', 'qr login failed: ' + e.message, 'err');
-    });
+    raSave(ticket);
     return;
   }
   if (op === 'cancel') {
@@ -447,26 +646,124 @@ $('btn-qr').onclick = function() {
 var captchaSitekey = null;
 var captchaRqdata = null;
 var captchaWidget = null;
+var captchaTarget = null;
+var captchaMsgId = 'login-msg';
+var captchaRetry = null;
 
-function loadCaptcha(sitekey, rqdata) {
+function loadCaptcha(sitekey, rqdata, boxId, msgId, retry) {
   captchaSitekey = sitekey;
   captchaRqdata = rqdata || null;
-  $('cap').className = '';
-  $('cap').innerHTML = '<div id="cap-target"></div>';
+  captchaMsgId = msgId || 'login-msg';
+  captchaRetry = retry || null;
+  captchaWidget = null;
+  captchaTarget = (boxId || 'cap') + '-target';
+  $(boxId || 'cap').className = '';
+  $(boxId || 'cap').innerHTML = '<div id="' + captchaTarget + '"></div>';
   if (window.hcaptcha) { renderCaptcha(); return; }
   window.__onHCaptcha = renderCaptcha;
   var s = document.createElement('script');
   s.src = 'https://js.hcaptcha.com/1/api.js?render=explicit&onload=__onHCaptcha';
   s.async = true;
+  s.onerror = function() {
+    setMsg(captchaMsgId, 'captcha could not load in this browser - paste a token instead', 'err');
+  };
   document.head.appendChild(s);
 }
 function renderCaptcha() {
   if (!window.hcaptcha || captchaWidget) return;
   try {
-    captchaWidget = hcaptcha.render('cap-target', {sitekey: captchaSitekey});
+    var opts = {sitekey: captchaSitekey,
+                callback: function() { if (captchaRetry) captchaRetry(); }};
+    if (captchaRqdata) opts.rqdata = captchaRqdata;
+    captchaWidget = hcaptcha.render(captchaTarget, opts);
   } catch (e) {
-    setMsg('login-msg', 'captcha failed to load: ' + e.message, 'err');
+    setMsg(captchaMsgId, 'captcha failed to load: ' + e.message, 'err');
   }
+}
+function captchaPayload(p) {
+  if (captchaSitekey && window.hcaptcha && captchaWidget !== null) {
+    try { p.captcha_key = [hcaptcha.getResponse(captchaWidget)]; } catch (e) {}
+    if (captchaRqdata) p.captcha_rqdata = captchaRqdata;
+  }
+  return p;
+}
+
+var lastHcHost = '';
+
+function hcHost(tok) {
+  try {
+    var raw = tok.indexOf('P1_') === 0 ? tok.slice(3) : tok;
+    var parts = raw.split('.');
+    var seg = parts[1] || parts[0];
+    var txt = bytesToText(b64urlDecode(seg)).replace(/[\x00-\x1f]/g, '.');
+    var o = null;
+    try { o = JSON.parse(txt); } catch (e) {}
+    if (o) return o.host || o.hostname || ('keys=' + Object.keys(o).join(','));
+    return 'raw=' + txt.slice(0, 90);
+  } catch (e) { return 'decode failed: ' + e.message; }
+}
+
+function raLogin(ticket, caps) {
+  var payload = {ticket: ticket};
+  if (caps && caps.rqdata) payload.captcha_rqdata = caps.rqdata;
+  var req = {method: 'POST',
+             path: '/api/v9/users/@me/remote-auth/login',
+             body: JSON.stringify(payload)};
+  if (caps && caps.key) {
+    req.captcha_key = caps.key;
+    if (caps.session) req.captcha_session_id = caps.session;
+    if (caps.rqtoken) req.captcha_rqtoken = caps.rqtoken;
+  }
+  return post('/api/discord', req).then(function(r) {
+    if (r.error) throw new Error(r.error);
+    var body = JSON.parse(r.body);
+    if (body.captcha_sitekey) {
+      if (caps && caps.key) {
+        setMsg('qr-msg', 'captcha rejected (' + r.status + '): ' +
+               JSON.stringify(body.captcha_key) + ' (token host=' + lastHcHost + ')',
+               'err');
+      } else {
+        setMsg('qr-msg', 'captcha required - solve it below and this continues automatically', '');
+      }
+      loadCaptcha(body.captcha_sitekey, body.captcha_rqdata, 'qrcap', 'qr-msg',
+                  function() {
+        var tok = null;
+        try { tok = hcaptcha.getResponse(captchaWidget); } catch (e) {}
+        if (!tok) { setMsg('qr-msg', 'solve the checkbox first', 'err'); return; }
+        lastHcHost = hcHost(tok);
+        setMsg('qr-msg', 'solved (host=' + lastHcHost + ') - replaying...', '');
+        setTimeout(function() {
+          raLogin(ticket, {key: tok,
+                           rqdata: body.captcha_rqdata,
+                           session: body.captcha_session_id,
+                           rqtoken: body.captcha_rqtoken});
+        }, 2500);
+      });
+      return null;
+    }
+    if (!body.encrypted_token)
+      throw new Error('no encrypted token (' + r.status + '): ' + r.body);
+    return raState.keys.priv.decrypt(
+      {name:'RSA-OAEP'},
+      b64urlDecode(body.encrypted_token));
+  }).then(function(buf) {
+    return buf ? bytesToText(new Uint8Array(buf)) : null;
+  });
+}
+
+function raSave(ticket) {
+  raLogin(ticket).then(function(token) {
+    if (!token) return;
+    return post('/api/token', {token: token}).then(function(r) {
+      if (r.error) throw new Error(r.error);
+      setMsg('qr-msg', 'signed in. token stored.', 'good');
+      $('qrbox').innerHTML = '';
+refreshStatus();
+      if (raState) { post('/api/ra/close', {id: raState.id}); raState = null; }
+    });
+  }).catch(function(e) {
+    setMsg('qr-msg', 'qr login failed: ' + e.message, 'err');
+  });
 }
 
 function doLogin() {
@@ -487,10 +784,7 @@ function doLogin() {
   }
 
   payload = {login: login, password: pass, undelete: false, captcha_key: null, login_source: null, gift_code_sku_id: null};
-  if (captchaSitekey && window.hcaptcha && captchaWidget !== null) {
-    try { payload.captcha_key = hcaptcha.getResponse(captchaWidget); } catch (e) {}
-    if (captchaRqdata) payload.captcha_rqdata = captchaRqdata;
-  }
+  captchaPayload(payload);
   post('/api/discord', {method:'POST', path:'/api/v9/auth/login', body: JSON.stringify(payload)})
     .then(loginDone)
     .catch(function(e){ setMsg('login-msg', String(e.message || e), 'err'); });
@@ -557,7 +851,47 @@ $('btn-logout').onclick = function() {
   });
 };
 
+var OAUTH_CLIENT_ID = '1554245082281017386';
+var OAUTH_REDIRECT = 'http://localhost:8642/callback';
+
+function oauthCapture() {
+  var h = window.location.hash || '';
+  if (h.indexOf('access_token=') < 0) return;
+  var tok = '', err = '';
+  h.replace(/^#/, '').split('&').forEach(function(kv) {
+    var p = kv.split('='), k = p[0];
+    var v = decodeURIComponent(p.slice(1).join('=') || '');
+    if (k === 'access_token') tok = v;
+    if (k === 'error' || k === 'error_description') err = err ? err + ' ' + v : v;
+  });
+  try { history.replaceState(null, '', window.location.pathname); } catch(e) {}
+  showTab('sign');
+  if (err) { setMsg('oauth-msg', 'discord said: ' + err, 'err'); return; }
+  if (!tok) { setMsg('oauth-msg', 'no access token in redirect', 'err'); return; }
+  setMsg('oauth-msg', 'got token, saving...', '');
+  post('/api/token', {token: tok}).then(function(r) {
+    if (r.error) throw new Error(r.error);
+    setMsg('oauth-msg', 'signed in. token stored.', 'good');
+    var back = function() { showTab('sign'); };
+    refreshStatus().then(back, back);
+  }).catch(function(e) {
+    setMsg('oauth-msg', 'failed to save token: ' + e.message, 'err');
+  });
+}
+
+function oauthStart() {
+  var url = 'https://discord.com/oauth2/authorize?client_id=' + OAUTH_CLIENT_ID +
+            '&response_type=token&redirect_uri=' + encodeURIComponent(OAUTH_REDIRECT) +
+            '&scope=identify';
+  setMsg('oauth-msg', 'opening discord.com/authorize ...', '');
+  setTimeout(function() { window.location.assign(url); }, 1200);
+}
+
+$('btn-oauth').onclick = function() { oauthStart(); };
+
 refreshStatus();
+oauthCapture();
+setInterval(function() { refreshStatus(); }, 5000);
 </script>
 </body>
 </html>

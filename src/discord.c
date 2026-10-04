@@ -1,6 +1,9 @@
 #define _GNU_SOURCE
+extern int sceNetPoolCreate(const char*, int, int);
+
 #include "discord.h"
 #include "curl_api.h"
+#include "paths.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -46,8 +49,21 @@ static long long now_ms(void) {
 }
 
 static void net_init_once(void) {
-  sceNetInit();
-  g_init_ok = curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK;
+  int rc, pool;
+
+  printf("net: stage=sceNetInit\n");
+  rc = sceNetInit();
+  printf("net: sceNetInit rc=%d\n", rc);
+
+  printf("net: stage=sceNetPoolCreate\n");
+  pool = sceNetPoolCreate("drpc5_curl", 512 * 1024, 0);
+  printf("net: sceNetPoolCreate id=%d\n", pool);
+  if (pool < 0) return;
+
+  printf("net: stage=curl_global_init\n");
+  rc = curl_global_init(CURL_GLOBAL_DEFAULT);
+  printf("net: curl_global_init rc=%d\n", rc);
+  g_init_ok = (rc == CURLE_OK);
 }
 
 int discord_init(void) {
@@ -67,26 +83,34 @@ static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *ud) {
 }
 
 int discord_http(const char *method, const char *path, const char *body,
-                 int *status, char *out, size_t outcap) {
+                 struct curl_slist *extra, int *status, char *out,
+                 size_t outcap) {
   CURL *h;
-  struct curl_slist *hdrs = NULL;
+  struct curl_slist *hdrs = extra;
   char url[512];
   char *tmp;
   CURLcode rc;
   long code = 0;
 
-  if (discord_init() != 0)
+  if (discord_init() != 0) {
+    curl_slist_free_all(hdrs);
     return -1;
-  if (path[0] != '/')
+  }
+  if (path[0] != '/') {
+    curl_slist_free_all(hdrs);
     return -1;
+  }
   snprintf(url, sizeof(url), "https://discord.com%s", path);
 
   h = curl_easy_init();
-  if (!h)
+  if (!h) {
+    curl_slist_free_all(hdrs);
     return -1;
+  }
   tmp = calloc(1, 32768);
   if (!tmp) {
     curl_easy_cleanup(h);
+    curl_slist_free_all(hdrs);
     return -1;
   }
   out[0] = 0;
@@ -95,11 +119,16 @@ int discord_http(const char *method, const char *path, const char *body,
   curl_easy_setopt(h, CURLOPT_URL, url);
   curl_easy_setopt(h, CURLOPT_CUSTOMREQUEST, method);
   curl_easy_setopt(h, CURLOPT_USERAGENT,
-                   "Mozilla/5.0 (PlayStation 5 6.00) AppleWebKit/605.1.15 "
-                   "(KHTML, like Gecko) dRPC5/1.0");
+                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
   hdrs = curl_slist_append(hdrs, "Content-Type: application/json");
   hdrs = curl_slist_append(hdrs, "Accept: */*");
+  hdrs = curl_slist_append(hdrs, "Accept-Language: en-US,en;q=0.9");
   hdrs = curl_slist_append(hdrs, "X-Discord-Locale: en-US");
+  hdrs = curl_slist_append(hdrs, "X-Discord-Timezone: UTC");
+  hdrs = curl_slist_append(hdrs,
+                           "X-Super-Properties: "
+                           "eyJvcyI6IldpbmRvd3MiLCJicm93c2VyIjoiQ2hyb21lIiwiZGV2aWNlIjoiIiwic3lzdGVtX2xvY2FsZSI6ImVuLVVTIiwiYnJvd3Nlcl91c2VyX2FnZW50IjoiTW96aWxsYS81LjAgKFdpbmRvd3MgTlQgMTAuMDsgV2luNjQ7IHg2NCkgQXBwbGVXZWJLaXQvNTM3LjM2IChLSFRNTCwgbGlrZSBHZWNrbykgQ2hyb21lLzEyNC4wLjAuMCBTYWZhcmkvNTM3LjM2IiwiYnJvd3Nlcl92ZXJzaW9uIjoiMTI0LjAuMC4wIiwib3NfdmVyc2lvbiI6IjEwLjAiLCJyZWZlcnJlciI6IiIsInJlZmVycmluZ19kb21haW4iOiIiLCJyZWZlcnJlcl9jdXJyZW50IjoiIiwicmVmZXJyaW5nX2RvbWFpbl9jdXJyZW50IjoiIiwicmVsZWFzZV9jaGFubmVsIjoic3RhYmxlIiwiY2xpZW50YnVpbGRudW1iZXIiOjI4NTExNCwiY2xpZW50X2V2ZW50X3NvdXJjZSI6bnVsbH0=");
   curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs);
   if (body && *body) {
     curl_easy_setopt(h, CURLOPT_POSTFIELDS, body);
@@ -110,8 +139,9 @@ int discord_http(const char *method, const char *path, const char *body,
   curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, 20000L);
   curl_easy_setopt(h, CURLOPT_TIMEOUT_MS, 30000L);
-  curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 0L);
+  curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 1L);
   curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, 2L);
+  curl_easy_setopt(h, CURLOPT_CAINFO, CA_PATH);
   curl_easy_setopt(h, CURLOPT_ACCEPT_ENCODING, "");
 
   rc = curl_easy_perform(h);
@@ -291,8 +321,9 @@ int ra_start(const char *public_key, char *err, size_t errcap) {
   curl_easy_setopt(h, CURLOPT_CONNECT_ONLY, 2L);
   curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, 20000L);
-  curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 0L);
+  curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 1L);
   curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, 2L);
+  curl_easy_setopt(h, CURLOPT_CAINFO, CA_PATH);
 
   curl_err[0] = 0;
   curl_easy_setopt(h, CURLOPT_ERRORBUFFER, curl_err);

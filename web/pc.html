@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dRPC5 - link discord</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #12131a; color: #e3e5ef; font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding: 16px; max-width: 720px; margin: 0 auto;
+}
+h1 { font-size: 22px; margin-bottom: 4px; color: #fff; }
+h1 span { color: #5865f2; }
+h2 { font-size: 16px; margin-bottom: 8px; color: #c8cad6; }
+.sub { color: #8b8f9e; font-size: 13px; margin-bottom: 14px; }
+.bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.pill { background: #1d1f29; border: 1px solid #2c2f3d; border-radius: 999px; padding: 4px 12px; font-size: 12px; color: #9fa3b4; }
+.pill.ok { border-color: #3ba55d; color: #57f287; }
+.pill.bad { border-color: #ed4245; color: #ff7b7b; }
+.card { background: #191b24; border: 1px solid #262937; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.tabs button {
+  flex: 1; padding: 9px; background: #1d1f29; color: #9fa3b4; border: 1px solid #2c2f3d;
+  border-radius: 8px; font-size: 13px; cursor: pointer;
+}
+.tabs button.active { background: #5865f2; color: #fff; border-color: #5865f2; }
+ol, ul { margin: 8px 0 0 20px; font-size: 14px; color: #b9bccb; }
+li { margin-bottom: 7px; }
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: #12131a; border: 1px solid #2c2f3d; border-radius: 6px;
+}
+code { padding: 1px 5px; font-size: 13px; color: #ffb86c; }
+pre { display: block; padding: 10px; font-size: 13px; color: #57f287; overflow-x: auto; white-space: pre; margin-top: 8px; }
+textarea {
+  width: 100%; padding: 9px 10px; background: #12131a; color: #e3e5ef;
+  border: 1px solid #2c2f3d; border-radius: 8px; font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+input[type=password] {
+  width: 100%; padding: 9px 10px; background: #12131a; color: #e3e5ef;
+  border: 1px solid #2c2f3d; border-radius: 8px; font-size: 14px;
+}
+button.act {
+  margin-top: 14px; width: 100%; padding: 11px; background: #5865f2; color: #fff;
+  border: 0; border-radius: 8px; font-size: 15px; cursor: pointer;
+}
+button.act.secondary { background: #2c2f3d; }
+.hint { font-size: 12px; color: #8b8f9e; margin-top: 8px; }
+.msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+.msg.err { color: #ff7b7b; }
+.msg.good { color: #57f287; }
+.hidden { display: none; }
+a { color: #5865f2; }
+.warn {
+  background: #2a1c1e; border: 1px solid #5a2a2c; border-radius: 8px;
+  padding: 10px; font-size: 13px; color: #ffb3b3; margin-top: 10px;
+}
+</style>
+</head>
+<body>
+<h1>dRPC5 <span>link discord</span></h1>
+<div class="sub">open this page from any phone or pc on your wifi, grab your token there, paste it here. it is sent straight to the ps5 and nowhere else.</div>
+<div class="bar">
+  <span class="pill" id="p-token">sign-in: ?</span>
+  <span class="pill" id="p-gw">presence: ?</span>
+</div>
+
+<div class="card">
+  <h2>1 - get your token</h2>
+  <div class="hint">a token is a long string that authenticates as <b>you</b>. treat it like a password: anyone holding it controls your account.</div>
+  <div class="tabs" style="margin-top:12px">
+    <button id="tab-a" class="active">browser console</button>
+    <button id="tab-b">network tab</button>
+  </div>
+  <div id="m-a">
+    <ol>
+      <li>on this device open <a href="https://discord.com/app" target="_blank" rel="noopener">discord.com/app</a> (or the discord desktop app) and log in.</li>
+      <li>open devtools: <code>F12</code> / <code>Ctrl+Shift+J</code> / <code>Cmd+Option+J</code> and go to the <b>console</b> tab.</li>
+      <li>paste this and press enter:</li>
+    </ol>
+    <textarea id="snip" rows="16" readonly spellcheck="false">(function(){
+  var tok = null;
+  function ok(s){ return typeof s === 'string' &amp;&amp; s.length &gt; 50 &amp;&amp; s.indexOf('.') !== -1; }
+  var w = window.webpackChunkdiscord_app;
+  function scan(o){
+    try {
+      Object.values(o.c).forEach(function(e){
+        var x = e.exports;
+        if (!tok &amp;&amp; x &amp;&amp; x.setToken &amp;&amp; x.getToken) {
+          try { tok = x.getToken(); } catch (err) {}
+        }
+      });
+    } catch (err) {}
+  }
+  if (w) {
+    try { w.push([[Symbol()]], {}, scan); } catch (err) {}
+    if (!ok(tok)) { try { w.push([[Symbol()], {}, scan]); } catch (err) {} }
+  }
+  if (!ok(tok)) {
+    try {
+      var f = document.createElement('iframe');
+      document.body.appendChild(f);
+      var raw = f.contentWindow.localStorage.getItem('token');
+      f.remove();
+      var cand = raw;
+      try { cand = JSON.parse(raw); } catch (err) {}
+      if (typeof cand === 'string') { tok = cand; }
+      else if (cand &amp;&amp; typeof cand === 'object') {
+        (function walk(v){
+          if (tok || !v) return;
+          if (typeof v === 'string') { if (ok(v)) tok = v; return; }
+          if (typeof v === 'object') { Object.values(v).forEach(walk); }
+        })(cand);
+      }
+    } catch (err) {}
+  }
+  if (!ok(tok)) {
+    console.log('%cno token found - use the network tab', 'color:#ff7b7b');
+    return;
+  }
+  console.log('%cToken:', 'color:#57f287;font-size:16px', tok);
+  function legacy(){
+    var ta = document.createElement('textarea');
+    try {
+      ta.value = tok;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+    } catch (err) {}
+    var done = false;
+    try { done = document.execCommand('copy'); } catch (err) {}
+    try { ta.remove(); } catch (err) {}
+    if (done) {
+      console.log('%ccopied to clipboard', 'color:#57f287');
+    } else {
+      console.log('%ccopy blocked - copy the value above by hand', 'color:#ff7b7b');
+    }
+  }
+  if (navigator.clipboard &amp;&amp; navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(tok).then(function(){
+      console.log('%ccopied to clipboard', 'color:#57f287');
+    }, legacy);
+  } else { legacy(); }
+})();</textarea>
+    <button class="act secondary" id="btn-copy">copy snippet</button>
+    <div class="hint">it prints your token <b>and</b> copies it to the clipboard. this calls discord's own <code>getToken()</code>, so it works even where <code>localStorage.token</code> is hidden. if it logs <code>no token found</code>, your clipboard was <b>not</b> touched - use the network tab below.</div>
+    <div class="hint">note: recent discord builds store <code>localStorage.token</code> as a json object (<code>{"locale":...,"ast":[]}</code>) rather than the raw token, so that fallback rarely applies - the <code>getToken()</code> path above is the one that works.</div>
+    <div class="hint">fallback if it says "no token found": <code>F12</code> &rarr; <b>application</b> &rarr; local storage &rarr; <code>https://discord.com</code> &rarr; look for the <code>token</code> key. it only appears once you turn on device emulation first (<code>Ctrl+Shift+M</code> / <code>Cmd+Shift+M</code>). copy the value <b>without</b> the surrounding quotes.</div>
+  </div>
+  <div id="m-b" class="hidden">
+    <ol>
+      <li>open <a href="https://discord.com/app" target="_blank" rel="noopener">discord.com/app</a> and log in.</li>
+      <li>open devtools (<code>F12</code>) and go to the <b>network</b> tab.</li>
+      <li>in the filter box type <code>users/@me</code> and refresh the page.</li>
+      <li>click the first <code>users/@me</code> request, open <b>headers</b> &rarr; <b>request headers</b>.</li>
+      <li>find <code>authorization:</code> - the value after it is your token. copy it.</li>
+    </ol>
+  </div>
+</div>
+
+<div class="card">
+  <h2>2 - paste it here</h2>
+  <input type="password" id="tok" placeholder="user token" spellcheck="false" autocomplete="off">
+  <button class="act" id="save">save token</button>
+  <div class="msg" id="msg"></div>
+  <div class="hint">stored on the ps5 at /data/drpc5/token. presence reconnects within about 10 seconds. the pills above update on their own.</div>
+  <div class="warn">an oauth access token (from an "authorize" button) will be rejected by the gateway with error 4004. only a raw user token works.</div>
+</div>
+
+<div class="card">
+  <h2>on the ps5 itself</h2>
+  <div class="hint">if you would rather not type: open <code>http://127.0.0.1:8642</code> in the ps5 browser and use the <b>sign in</b> tab - it takes the token too. discord login, qr and email are tucked under <b>other sign-in methods</b>.</div>
+</div>
+
+<script>
+var $ = function(id) { return document.getElementById(id); };
+
+function setMsg(text, cls) {
+  var el = $('msg');
+  el.textContent = text || '';
+  el.className = 'msg' + (cls ? ' ' + cls : '');
+}
+
+function api(path, opts) {
+  return fetch(path, opts).then(function(r) {
+    return r.json().catch(function() { return {}; }).then(function(j) {
+      if (!r.ok && !j.error) j.error = 'http ' + r.status;
+      return j;
+    });
+  });
+}
+
+function refreshStatus() {
+  return api('/api/status').then(function(s) {
+    if (s.error) {
+      $('p-token').textContent = 'server: ' + s.error;
+      $('p-token').className = 'pill bad';
+      return s;
+    }
+    $('p-token').textContent = s.has_token ? 'sign-in: token saved' : 'sign-in: no token';
+    $('p-token').className = 'pill ' + (s.has_token ? 'ok' : 'bad');
+    var g = s.gateway || {};
+    var txt = !s.has_token ? 'presence: waiting' :
+              g.auth_failed ? 'presence: token rejected' :
+              g.ready ? 'presence: live' :
+              g.connected ? 'presence: connecting' : 'presence: offline';
+    $('p-gw').textContent = txt;
+    $('p-gw').className = 'pill ' + (g.ready ? 'ok' : (s.has_token && g.auth_failed ? 'bad' : ''));
+    return s;
+  }).catch(function(e) {
+    $('p-token').textContent = 'server: unreachable';
+    $('p-token').className = 'pill bad';
+    return { error: e.message };
+  });
+}
+
+function show(which) {
+  $('m-a').className = which === 'a' ? '' : 'hidden';
+  $('m-b').className = which === 'b' ? '' : 'hidden';
+  $('tab-a').className = which === 'a' ? 'active' : '';
+  $('tab-b').className = which === 'b' ? 'active' : '';
+}
+
+$('tab-a').onclick = function() { show('a'); };
+$('tab-b').onclick = function() { show('b'); };
+
+$('btn-copy').onclick = function() {
+  var el = $('snip');
+  el.focus();
+  el.select();
+  var ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(el.value).then(function() {
+      setMsg('snippet copied', 'good');
+    }, function() {
+      setMsg(ok ? 'snippet copied' : 'select the snippet and copy it manually', ok ? 'good' : 'err');
+    });
+    return;
+  }
+  setMsg(ok ? 'snippet copied' : 'select the snippet and copy it manually', ok ? 'good' : 'err');
+};
+
+$('save').onclick = function() {
+  var t = $('tok').value.trim().replace(/^"|"$/g, '');
+  if (t.length < 59) {
+    setMsg('that is too short - a token is around 60-75 characters', 'err');
+    return;
+  }
+  setMsg('saving...', '');
+  api('/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: t })
+  }).then(function(r) {
+    if (r.error) { setMsg(r.error, 'err'); return; }
+    $('tok').value = '';
+    setMsg('token saved to the ps5. presence should connect within ~10 seconds.', 'good');
+    refreshStatus();
+  }).catch(function(e) {
+    setMsg('save failed: ' + e.message, 'err');
+  });
+};
+
+refreshStatus();
+setInterval(refreshStatus, 3000);
+</script>
+</body>
+</html>

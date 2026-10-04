@@ -13,7 +13,10 @@
 #define CONFIG_PATH   "/data/drpc5/config.ini"
 #endif
 #ifndef TOKEN_PATH
-#define TOKEN_PATH    "/data/drpc5/token"
+#define TOKEN_PATH     "/data/drpc5/token"
+#endif
+#ifndef ICONS_PATH
+#define ICONS_PATH     "/data/drpc5/icons.ini"
 #endif
 #ifndef DRPC_PORT
 #define DRPC_PORT     8642
@@ -23,4 +26,7 @@
 #endif
 #ifndef TOKEN_MAX
 #define TOKEN_MAX     600
+#endif
+#ifndef CA_PATH
+#define CA_PATH      STORE_DIR "/cacert.pem"
 #endif

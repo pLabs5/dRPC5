@@ -5,8 +5,9 @@
 typedef struct ps5_app {
   int      pid;
   uint32_t app_id;
-  uint32_t app_type;
   char     title_id[16];
+  char     concept_id[16];
+  char     content_id[48];
   char     name[128];
   char     version[16];
   char     icon_path[128];

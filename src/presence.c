@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/proc.h>
 #include <sys/sysctl.h>
@@ -12,11 +13,11 @@
 #include "presence.h"
 
 typedef struct app_info {
-  uint32_t app_id;
-  uint64_t unknown1;
-  uint32_t app_type;
-  char     title_id[10];
-  char     unknown2[0x3c];
+  uint32_t app_id;       /* 0x00 */
+  uint32_t unknown1;     /* 0x04 */
+  uint64_t unknown2;     /* 0x08 */
+  char     title_id[10]; /* 0x10 */
+  char     pad[110];
 } app_info_t;
 
 int sceKernelGetAppInfo(int pid, app_info_t *info);
@@ -107,6 +108,17 @@ json_str(const char *json, size_t len, const char *key, char *out, size_t cap) {
   return 0;
 }
 
+static int
+title_id_ok(const char *s) {
+  size_t i;
+  if(!s || strlen(s) < 5) return 0;
+  for(i = 0; s[i]; i++) {
+    char c = s[i];
+    if(!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) return 0;
+  }
+  return 1;
+}
+
 static void
 fill_from_param(const char *json, size_t len, ps5_app_t *app) {
   if(!app->name[0])
@@ -118,6 +130,10 @@ fill_from_param(const char *json, size_t len, ps5_app_t *app) {
              sizeof(app->version));
   if(!app->version[0])
     json_str(json, len, "masterVersion", app->version, sizeof(app->version));
+  if(!app->content_id[0])
+    json_str(json, len, "contentId", app->content_id, sizeof(app->content_id));
+  if(!app->concept_id[0])
+    json_str(json, len, "conceptId", app->concept_id, sizeof(app->concept_id));
 }
 
 static void
@@ -166,11 +182,14 @@ presence_foreground(ps5_app_t *out) {
   if(!out) return -1;
   memset(out, 0, sizeof(*out));
 
-  if(sysctl(mib, 4, NULL, &buf_size, NULL, 0) != 0 || buf_size == 0)
+  if(sysctl(mib, 4, NULL, &buf_size, NULL, 0) != 0 || buf_size == 0) {
+    printf("drpc5: sysctl size errno=%d\n", errno);
     return -1;
+  }
   buf = malloc(buf_size);
   if(!buf) return -1;
   if(sysctl(mib, 4, buf, &buf_size, NULL, 0) != 0) {
+    printf("drpc5: sysctl read errno=%d\n", errno);
     free(buf);
     return -1;
   }
@@ -191,7 +210,7 @@ presence_foreground(ps5_app_t *out) {
     memset(&ai, 0, sizeof(ai));
     if(sceKernelGetAppInfo(ki->ki_pid, &ai) != 0) continue;
     ai.title_id[sizeof(ai.title_id) - 1] = 0;
-    if(!ai.title_id[0]) continue;
+    if(!title_id_ok(ai.title_id)) continue;
     if(!strcmp(ai.title_id, "00000000")) continue;
 
     running = ki->ki_stat == SRUN;
@@ -205,7 +224,6 @@ presence_foreground(ps5_app_t *out) {
     best_start = started;
     out->pid = (int)ki->ki_pid;
     out->app_id = ai.app_id;
-    out->app_type = ai.app_type;
     out->running = running;
     out->start_epoch = (int64_t)started;
     copy_str(out->title_id, sizeof(out->title_id), ai.title_id);

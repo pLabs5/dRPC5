@@ -1,6 +1,5 @@
 build/
 dist/
-tools/lib/
 *.o
 *.elf
 *.kate-swp

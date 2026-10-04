@@ -24,3 +24,4 @@ int gateway_build_presence(char *out, size_t cap, const gw_activity *act,
 void gateway_status(int *connected, int *ready, int *auth_failed,
                     char *activity, size_t cap);
 const char *gateway_last_activity(void);
+int gateway_frame(char *out, size_t cap);
