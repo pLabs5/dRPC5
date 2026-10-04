@@ -117,13 +117,13 @@ jobs:
       - name: Check publish token
         id: tok
         env:
-          TOK: ${{ secrets.MULTI_REPO_GH_TOKEN }}
+          TOK: ${{ secrets.MUTLI_REPO_GH_TOKEN }}
         run: |
           if [ -n "$TOK" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::secrets.MULTI_REPO_GH_TOKEN is not set; skipping pWeb5 payload publish"
+            echo "::warning::secrets.MUTLI_REPO_GH_TOKEN is not set; skipping pWeb5 payload publish"
           fi
 
       - name: Download build artifacts
@@ -141,7 +141,7 @@ jobs:
         with:
           repository: pawprnt/pWeb5
           path: pweb5
-          token: ${{ secrets.MULTI_REPO_GH_TOKEN }}
+          token: ${{ secrets.MUTLI_REPO_GH_TOKEN }}
 
       - name: Publish payload
         if: steps.tok.outputs.available == 'true'
