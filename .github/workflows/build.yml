@@ -93,6 +93,20 @@ jobs:
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
+      # secrets context is not usable in an `if` expression, so surface it via env
+      # and gate the write steps on this step's output instead.
+      - name: Check publish token
+        id: tok
+        env:
+          TOK: ${{ secrets.MULTI_REPO_GH_TOKEN }}
+        run: |
+          if [ -n "$TOK" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::secrets.MULTI_REPO_GH_TOKEN is not set; skipping pWeb5 payload publish"
+          fi
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -103,7 +117,7 @@ jobs:
       # needs a token with write access to pawprnt/pWeb5. When the secret is
       # absent these steps skip and the job still passes.
       - name: Checkout pWeb5
-        if: ${{ secrets.MULTI_REPO_GH_TOKEN != '' }}
+        if: steps.tok.outputs.available == 'true'
         uses: actions/checkout@v4
         with:
           repository: pawprnt/pWeb5
@@ -111,7 +125,7 @@ jobs:
           token: ${{ secrets.MULTI_REPO_GH_TOKEN }}
 
       - name: Publish payload
-        if: ${{ secrets.MULTI_REPO_GH_TOKEN != '' }}
+        if: steps.tok.outputs.available == 'true'
         working-directory: pweb5
         run: |
           set -euo pipefail
