@@ -1,7 +1,6 @@
 # dRPC5 — Discord Rich Presence for PS5 via Direct Gateway
 
-A PlayStation 5 homebrew payload that connects straight to Discord's gateway and
-publishes Rich Presence, so the PS5 shows up as an active console session.
+A PlayStation 5 homebrew payload that connects to discord gateway and publishes rich presence
 
 > [!WARNING]
 > This project uses a self-bot style approach to update RPC status. It **is**
@@ -13,44 +12,82 @@ publishes Rich Presence, so the PS5 shows up as an active console session.
 > software corruption, data loss, or anything else arising from its use.
 
 ---
+## TLDR
+A homebrew payload for the Playstation 5 that uses a User Token to publish Rich Presence over discords Gateway.
+
+---
 
 ## What it does
 
-* Connects directly to Discord's gateway from the console and publishes Rich
-  Presence (`op 3`). Nothing needs to be running on a PC.
-* Identifies as a PS5 console session, so the account reports as active on
+* Connects straight to Discord's gateway from the console and publishes Rich
+  Presence, no PC host/ bridge is needed.
+* Identifies as a PS5 console session, so the discord account reports as active on
   console (see [Console identity](#console-identity)).
 * Works out what's running by walking the console's own process list
   (`sysctl KERN_PROC_PROC`) rather than asking PSN what you're playing, then
   fetches box art for that title from PSN.
-* Manual override for activity text, assets and timestamps when you don't want
+* Manually set activity text, assets and timestamps when you don't want
   auto-detection.
-* Web UI for configuration on the console itself at `http://localhost:8642/`.
-  That page is **local-only** — non-local requests to `/` get redirected to
-  `/pc.html`.
+* The console-side WebUI is avaiable at `http://localhost:8642`.
+  * The PC-Side WebUI is available at `http://<consoleIP>:8642/pc.html`, any attempt to navigate to the console-side WebUI from a non-localhost IP (not the console) will be re-directed to pc.html.
 * Sign-in by user token, email + password, or QR code via Discord Remote Auth
-  (`wss://remote-auth-gateway.discord.gg`). `/pc.html` is reachable from another
+  (`wss://remote-auth-gateway.discord.gg`). `/pc.html` is reachable from another 8642
   device on the network for this.
-  **Work in progress:** the QR code and email + password flows are not reliable
-  yet and may fail partway through. Pasting a user token is the dependable
+   * **Work in progress:** the QR code and email + password flows are not reliable
+  yet and **WILL** fail partway through. Pasting a user token is the only working
   option for now.
-* Authenticated Discord REST proxy with hCaptcha header passthrough, so the
-  browser can make token-gated calls the console would otherwise be blocked
-  from.
 
 ## Console identity
 
-This is the part that isn't obvious.
+This was probably the hardest part of recent development.
 
-Discord buckets each gateway session into a *client status* — `desktop`,
-`mobile`, `web`, plus undocumented `embedded` and `vr` keys. Presence services
-such as [Lanyard](https://github.com/Phineas/lanyard) just probe for those keys,
-so **the bucket is decided entirely by how you identify**, not by anything you
-put in an activity.
+On a stock PS5, when logging in with Discord and trusting the application, your discord profile reports that you are on console.
+To achive this on a non-stock PS5 (normal discord integration not available) we need to do a bit of work.
+If use [lanyard](https://github.com/Phineas/lanyard) to get our Discord Status on our profile, the reponse looks a bit like:
+```json
+  {
+  "data": {
+    "kv": {},
+      ...
+      },
+      ...
+      },
+      ...
+      },
+      ...
+      },
+      ...
+    },
+    "activities": [
+      {
+      ...
+      },
+      {
+      ...
+      },
+      {
+      ...
+      }
+    ],
+    "discord_status": "online",
+    "active_on_discord_web": true,
+    "active_on_discord_desktop": false,
+    "active_on_discord_mobile": false,
+    "active_on_discord_embedded": false,
+    /* The above, 'active_on_discord_embedded' is what we want to be true */
+    "active_on_discord_vr": false,
+    "listening_to_spotify": false,
+    "spotify": null
+  },
+  "success": true
+  }
+```
+Now in order for us to flip that `active_on_discord_embedded` flag to `true` we need to reverse how the stock PS5 talks to the gateway.
+On PS5 there exists a file known as a **self**, what that stands for? No clue, but I digress, to figure out the stock PS5 behavior, we need to
+decrypt that **self** file, using a tool such as [ps5-self-pager](https://github.com/idlesauce/ps5-self-pager) we can do just that, after running
+that tool we get the raw executable the PS5 uses for Discord-related stuff, located in the dump at `/system_ex/common_ex/lib/Sce.Vsh.DiscordAccessor.dll.sprx`
 
-A stock PS5 Discord install identifies with Sony-private values that Discord
-maps onto the console bucket:
-
+Reverse engineering that file results in the properties it sends to the gateway:
 ```json
 "properties": {
   "os": "Playstation",
@@ -58,29 +95,12 @@ maps onto the console bucket:
   "version": "1.00"
 }
 ```
-
-Note `properties.version` — that field isn't in Discord's public
-`GatewayIdentifyProperties`, and `device` isn't used at all. Identifying this
-way is what makes a session report as active on console.
-
-Two things that are **not** the mechanism, worth recording so nobody repeats the
-experiment:
-
-* **Activity `platform`.** `"platform": "ps5"` on an activity is a genuine field
-  (`ActivityPlatform` in `discord-api-types`) and does tag the activity as
-  PlayStation, but it does *not* move the session into the `embedded` bucket.
-* **`ActivityFlags.Embedded` (256).** Despite the name, this refers to Discord's
-  *embedded activities* / Embedded App SDK, not consoles. Setting it does nothing
-  here.
-
-`src/gw/ws.c` reproduces the console identity, and all four values are
-configurable so you can A/B without rebuilding — see `gw_os`, `gw_browser`,
-`gw_version`, `gw_device` below.
+If we now send that information through to the websocket that we open to communicate with Discord, puts the user whos token is saved in the `console` bucket, which then sets the `active_on_discord_embedded` flag to true if you send a request to lanyard.
 
 ## Prebuilt binaries
 
 Prebuilt payloads are on the
-[releases page](https://github.com/pawprnt/dRPC5/releases). Each release is two
+[releases page](https://github.com/pLabs5/dRPC5/releases). Each release is two
 files:
 
 | File | |
@@ -102,9 +122,7 @@ cross-toolchain. Unsigned, for your own console.
 <summary>Updating</summary>
 
 The tile installs once, guarded by `/user/appmeta/DRPC00001`, so a new payload
-updates the code but leaves the old icon. Force a reinstall with
-`rm -rf /user/appmeta/DRPC00001`. The payload itself is never installed — it is
-injected at deploy time, so redeploying is the whole upgrade.
+updates the code but leaves the old icon. Force a reinstall with an elf that deletes the above mentioned path or via FTP. 
 
 </details>
 
@@ -113,11 +131,22 @@ injected at deploy time, so redeploying is the whole upgrade.
 Requires the [Payload SDK](https://github.com/ps5-payload-dev/sdk) and a host C
 compiler. Everything else, including the tile-packaging dependency, is in the
 repository:
+  ```sh
+  payldSDK=$(mktemp -d)
+  payloadSDK=$(mktemp -d)
+  dRPC5=$(mktemp -d)
+  git clone https://github.com/ps5-payload-dev/sdk.git "$payldSDK"
+  cd "$payldSDK" 
+  (install build deps for Payload SDK: Clang 18, LDD 18, LLVM / LLVM-config, meson, pyelftool )
+  # Makes the PS5 Payload SDK used for Building
+  make clean && make DESTDIR="$payloadSDK"
+  git clone https://github.com/pLabs5/dRPC5.git "$dRPC5" 
+  cd "$dRPC5"
+  export PS5_PAYLOAD_SDK="$payloadSDK"
+  make clean && make
+  ```
 
-```sh
-export PS5_PAYLOAD_SDK=/path/to/ps5-payload-sdk
-make clean && make
-```
+</details>
 
 Produces `dRPC5.elf` and `dist/drpc5-tile.pkg`. Host build tools are compiled
 with `HOSTCC` (default `cc`), never the PS5 cross-compiler — override with
@@ -273,12 +302,6 @@ at `http://<ps5-ip>:8642/pc.html`. Both `config.ini` and `token` are gitignored.
 The QR code and email + password sign-in options in that UI are work in
 progress; the token field is the reliable route.
 
-## Credits
-
-Console identity strings were recovered from the PS5's own
-`Sce.Vsh.DiscordAccessor` on a decrypted firmware dump; the `#US` string heap
-orders literals by first reference, which is what made the identify payload
-reconstructable.
 
 ## License
 
@@ -295,7 +318,7 @@ Each component retains its own license.
 | Component | Version | License | File |
 |---|---|---|---|
 | libcurl | 8.5.0 | curl license | [LICENSES/curl-LICENSE](third_party/LICENSES/curl-LICENSE) |
-| Mbed TLS | 3.6.2 | Apache-2.0 **or** GPL-2.0-or-later | [LICENSES/mbedtls-LICENSE](third_party/LICENSES/mbedtls-LICENSE) |
+| Mbed TLS | 3.6.2 | Apache-2.0 | [LICENSES/mbedtls-LICENSE](third_party/LICENSES/mbedtls-LICENSE) |
 | CA root bundle (`cacert.pem`) | 121 certs, 2026-09-25 | MPL-2.0 | [LICENSES/cacert-LICENSE](third_party/LICENSES/cacert-LICENSE) |
 | LibProsperoPkg (`tools/lib/`) | 2.0.0 | GPL-3.0 | [tools/lib/LICENSE](tools/lib/LICENSE) |
 
@@ -309,10 +332,10 @@ setup. Verify it with:
 cd tools/lib && sha256sum -c SHA256SUMS
 ```
 
-**Mbed TLS is used here under the Apache-2.0 option**, not the GPL-2.0-or-later
-option. Mbed TLS is dual-licensed and downstream users may pick either; this
-election is stated explicitly so there is no ambiguity about which terms apply to
-the vendored copy.
+**Mbed TLS is used here under the Apache-2.0 option**, not under GPL-2.0-or-later.
+Mbed TLS is dual-licensed and downstream users may pick either; this
+choice is defined explicitly so there is no confusion about which terms apply to
+the version under `third_party/mbedtls`
 
 All four are compatible with `AGPL-3.0-only`. The MPL-2.0 bundle stays MPL-2.0;
 the Apache-2.0, curl-licensed and GPL-3.0 components stay under those terms.
@@ -321,19 +344,20 @@ license version.
 
 ## Legal
 
-I, foxinwinter / pawprnt, am not affiliated with, associated with, sponsored by,
+I, foxinwinter/ pLabs5 and any and all contributers are not affiliated with, associated with, sponsored by,
 endorsed by, or otherwise established with Sony Interactive Entertainment,
 PlayStation, Discord, or any of their other companies or works.
+
+Just because a expict mention above isn't present does **NOT** mean
+I, foxinwinter/ pLabs5, or any contributer is affiliated, associated, sponsered by, enorsed by, or otherwise established 
+with any entity unless explicitlly mentioned.
 
 This software is provided "as is", without warranty of any kind, express or
 implied. Use of this software is at your own risk.
 
 You are solely responsible for complying with Discord's Terms of Service,
-PlayStation's terms, and any applicable law. The Discord protocol details and
-console identification values used here were obtained by reverse engineering a
-firmware dump on a personally owned console, and are used for personal research
-and interoperability.
+PlayStation's terms, and any applicable law.
 
 ## Disclaimer of AI Generated Content
 
-The used logo for the repo, favicon, and installed Tile **ARE** AI-generated
+The used logo for the repo, favicon, and installed tile logo **ARE** AI-generated
