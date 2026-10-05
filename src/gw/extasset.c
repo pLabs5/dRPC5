@@ -1,4 +1,4 @@
-#include "gw_common.h"
+#include "gw/gw_common.h"
 int proxy_external_asset(const char *url, char *out, size_t cap) {
   char token[TOKEN_MAX], app_id[32], ep[192], auth[TOKEN_MAX + 32];
   char body[700], esc[600], resp[4096];
@@ -41,7 +41,7 @@ int proxy_external_asset(const char *url, char *out, size_t cap) {
   hdrs = curl_slist_append(hdrs, auth);
   hdrs = curl_slist_append(hdrs, "Content-Type: application/json");
   hdrs = curl_slist_append(hdrs, "User-Agent: " GW_USER_AGENT);
-  pins = psn_pinned_hosts();
+  pins = dns_pin_url(ep);
 
   h = curl_easy_init();
   if (!h) {
@@ -53,12 +53,12 @@ int proxy_external_asset(const char *url, char *out, size_t cap) {
   curl_easy_setopt(h, CURLOPT_POST, 1L);
   curl_easy_setopt(h, CURLOPT_POSTFIELDS, body);
   curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs);
-  curl_easy_setopt(h, CURLOPT_RESOLVE, pins);
+  if (pins) curl_easy_setopt(h, CURLOPT_RESOLVE, pins);
   sink.buf = resp;
   sink.cap = 4094;
   curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, curlx_buf_cb);
   curl_easy_setopt(h, CURLOPT_WRITEDATA, &sink);
-curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
+  curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
     curl_setup(h, 15000L, 25000L);
 
   rc = curl_easy_perform(h);

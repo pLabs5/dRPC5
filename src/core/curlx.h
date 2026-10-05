@@ -1,6 +1,6 @@
 #pragma once
 
-#include "curl_api.h"
+#include "core/curl_api.h"
 
 /* Common transport policy for every outbound request: certificate and host
    verification on, our own CA bundle, and no signals so curl never trips the

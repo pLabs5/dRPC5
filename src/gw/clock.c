@@ -1,4 +1,4 @@
-#include "gw_common.h"
+#include "gw/gw_common.h"
 long long g_time_off;
 int g_time_known;
 long long g_time_synced_ms;
@@ -50,7 +50,7 @@ void sync_time_offset(void) {
   long long ep, off;
 
   date[0] = 0;
-  pins = psn_pinned_hosts();
+  pins = dns_pin_url("https://discord.com/api/v10/gateway");
   h = curl_easy_init();
   if (!h) {
     curl_slist_free_all(pins);
@@ -61,7 +61,7 @@ void sync_time_offset(void) {
   curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(h, CURLOPT_HEADERFUNCTION, date_hdr_cb);
   curl_easy_setopt(h, CURLOPT_HEADERDATA, date);
-curl_easy_setopt(h, CURLOPT_RESOLVE, pins);
+  if (pins) curl_easy_setopt(h, CURLOPT_RESOLVE, pins);
     curl_setup(h, 10000L, 15000L);
 
   rc = curl_easy_perform(h);

@@ -1,8 +1,10 @@
 #define _GNU_SOURCE
-#include "install.h"
+#include "install/install.h"
 
-#include "bundled_tile_pkg.h"
+#include "generated/bundled_tile_pkg.h"
 #include "core/util.h"
+#include "manifest/manifest.h"
+#include "notify/notify.h"
 #include "paths.h"
 
 #include <errno.h>
@@ -57,51 +59,54 @@ void install_tile(void) {
   int err;
 
   if(stat(APPMETA_PATH, &st)==0) {
-    notifyf("dRPC5: tile already installed");
+    /* Log only. As a toast this fired on every single launch and said nothing
+       the user needed to act on. If you want it back on screen, call
+       notify_tile_already() here instead. */
+    dlogf("drpc5: tile already installed\n");
     return;
   }
 
   if(mkdir(STORE_DIR, 0777)!=0 && errno!=EEXIST) {
     dlogf("drpc5: mkdir " STORE_DIR " errno=%d\n", errno);
-    notifyf("dRPC5: mkdir failed (%d)", errno);
+    notify_mkdir_failed(errno);
     return;
   }
   if(write_pkg()) {
     dlogf("drpc5: could not write " PKG_PATH " errno=%d\n", errno);
-    notifyf("dRPC5: pkg write failed (%d)", errno);
+    notify_pkg_write_failed(errno);
     return;
   }
   dlogf("dRPC5: pkg written (%u bytes)\n", kTilePkgSize);
-  notifyf("dRPC5: pkg written (%u bytes)", kTilePkgSize);
+  notify_pkg_written(kTilePkgSize);
 
   if((err=sceAppInstUtilInitialize())) {
     dlogf("sceAppInstUtilInitialize: %x\n", err);
-    notifyf("dRPC5: install init 0x%x", err);
+    notify_install_init_failed((unsigned)err);
     return;
   }
-  notifyf("dRPC5: install init ok");
+  notify_install_init_ok();
 
   memset(&info, 0, sizeof(info));
   if((err=sceAppInstUtilAppInstallPkg(PKG_VISIBLE, &info))==0) {
     dlogf("drpc5: tile installed\n");
-    notifyf("dRPC5: tile installed");
+    notify_tile_installed();
     return;
   }
   dlogf("sceAppInstUtilAppInstallPkg: %x\n", err);
-  notifyf("dRPC5: AppInstallPkg 0x%x", err);
+  notify_install_pkg_failed((unsigned)err);
 
   memset(&info2, 0, sizeof(info2));
   memset(&meta, 0, sizeof(meta));
   memset(&playgo, 0, sizeof(playgo));
   snprintf(uri, sizeof(uri), "file://%s", PKG_VISIBLE);
   meta.uri=uri;
-  meta.content_name="dRPC5";
+  meta.content_name=kManifest.app_name;
 
   if((err=sceAppInstUtilInstallByPackage(&meta, &info2, &playgo))==0) {
     dlogf("drpc5: tile installed\n");
-    notifyf("dRPC5: tile installed");
+    notify_tile_installed();
     return;
   }
   dlogf("sceAppInstUtilInstallByPackage: %x\n", err);
-  notifyf("dRPC5: InstallByPackage 0x%x", err);
+  notify_install_failed((unsigned)err);
 }

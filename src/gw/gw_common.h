@@ -1,14 +1,16 @@
 #pragma once
 
 #define _GNU_SOURCE
-#include "gw_internal.h"
+#include "gw/gw_internal.h"
 
 #include "core/config.h"
+#include "core/dns.h"
 #include "core/json.h"
 #include "core/util.h"
+#include "manifest/manifest.h"
 #include "paths.h"
-#include "presence.h"
-#include "psn.h"
+#include "presence/presence.h"
+#include "psn/psn.h"
 
 #include <errno.h>
 #include <fcntl.h>

@@ -43,7 +43,22 @@ LPP_ENV ?= DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 TITLE_ID    := DRPC00001
 CONTENT_ID  := UP9000-DRPC00001_00-DRPC5AAAAAAAAAAA
 PKG_TITLE   := dRPC5
-PKG_VERSION := 01.00
+# The version is defined once, in src/manifest/manifest.c, and the package stamp is
+# derived from it here. Storing it twice is how a tile ends up reporting a
+# different version from /api/status, so there is deliberately no second field.
+MANIFEST_VERSION := $(shell sed -n 's/^[[:space:]]*\.version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' src/manifest/manifest.c)
+ifeq ($(MANIFEST_VERSION),)
+$(error could not read .version from src/manifest/manifest.c)
+endif
+# The package format wants a zero-padded MM.SS stamp: 1.0 -> 01.00, 0.5 -> 00.50.
+PKG_VERSION := $(shell echo '$(MANIFEST_VERSION)' | awk -F. '{printf "%02d.%02d", $$1+0, $$2+0}')
+# ...and the other way round: src/paths.h builds every install path from
+# TITLE_ID, so a manifest that disagrees would install under a different path
+# than it reports. Fail loudly rather than shipping a tile that half works.
+MANIFEST_TITLE := $(shell sed -n 's/^[[:space:]]*\.title_id[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' src/manifest/manifest.c)
+ifneq ($(MANIFEST_TITLE),$(TITLE_ID))
+$(error .title_id "$(MANIFEST_TITLE)" in src/manifest/manifest.c does not match TITLE_ID "$(TITLE_ID)" here)
+endif
 
 BUILD := build
 DIST  := dist
@@ -65,11 +80,11 @@ PKGSRC   := $(BUILD)/bundled_tile_pkg.c
 WEBSRC   := $(BUILD)/web_assets.c
 CASRC    := $(BUILD)/bundled_ca.c
 # Discovered, not listed: a hand-maintained list silently drops any new .c file
-# from the link because the payload is built in one command. eboot.c is excluded:
-# it is the standalone eboot entry point and supplies its own _start.
-PAYLOAD_SRCS := $(filter-out src/eboot.c, \
-                 $(sort $(wildcard src/main.c src/install.c src/*.c src/*/*.c)))
-HEADERS  := $(sort $(wildcard src/*.h src/*/*.h))
+# from the link because the payload is built in one command. Discovery is
+# recursive so modules can be nested as deep as they need to be. eboot.c is
+# excluded: it is the standalone eboot entry point and supplies its own _start.
+PAYLOAD_SRCS := $(filter-out src/eboot/eboot.c,$(sort $(shell find src -name '*.c')))
+HEADERS  := $(sort $(shell find src -name '*.h'))
 
 # Header dependency tracking. Note the SDK's prospero-clang wrapper passes
 # --start-no-unused-arguments, which makes it drop -MMD, so no dRPC5.d is
@@ -142,10 +157,10 @@ $(BUILD)/homebrew/eboot.bin: $(BUILD)/tile-elf tile/sce_sys/param.json tile/sce_
 	cp tile/sce_sys/icon0.png $(BUILD)/homebrew/sce_sys/icon0.png
 
 
-$(BUILD)/tile-elf: $(BUILD)/tile-elf.o src/eboot.x
-	$(LD) --static -T src/eboot.x -o $@ $(BUILD)/tile-elf.o
+$(BUILD)/tile-elf: $(BUILD)/tile-elf.o src/eboot/eboot.x
+	$(LD) --static -T src/eboot/eboot.x -o $@ $(BUILD)/tile-elf.o
 
-$(BUILD)/tile-elf.o: src/eboot.c
+$(BUILD)/tile-elf.o: src/eboot/eboot.c
 	mkdir -p $(BUILD)
 	$(CC) -c $(CFLAGS) -o $@ $<
 

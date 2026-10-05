@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#include "util.h"
+#include "core/util.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -13,13 +13,6 @@
 #include <unistd.h>
 
 #include "paths.h"
-
-typedef struct notify_request {
-  char useless1[45];
-  char message[3075];
-} notify_request_t;
-
-int sceKernelSendNotificationRequest(int, notify_request_t *, size_t, int);
 
 /* The payload is sent with no terminal attached, so stdout goes nowhere once
    the loader detaches. Every diagnostic therefore also goes to a file, capped
@@ -76,17 +69,6 @@ void dlogf(const char *fmt, ...) {
   vfprintf(stdout, fmt, ap);
   va_end(ap);
   fputc('\n', stdout);
-}
-
-void notifyf(const char *fmt, ...) {
-  notify_request_t req;
-  va_list ap;
-
-  memset(&req, 0, sizeof req);
-  va_start(ap, fmt);
-  vsnprintf(req.message, sizeof req.message, fmt, ap);
-  va_end(ap);
-  sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
 }
 
 /* Truncating read that reports overflow, so callers can tell a complete file

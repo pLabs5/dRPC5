@@ -1,10 +1,11 @@
 #define _GNU_SOURCE
 #include "core/config.h"
 #include "core/util.h"
-#include "discord.h"
-#include "gateway.h"
+#include "discord/discord.h"
+#include "gw/gateway.h"
 #include "http/http.h"
-#include "install.h"
+#include "install/install.h"
+#include "notify/notify.h"
 #include "paths.h"
 
 #include <pthread.h>
@@ -43,7 +44,9 @@ main(int argc, char *argv[]) {
       fclose(m);
     }
   }
-  notifyf("dRPC5 running - 127.0.0.1:%d", DRPC_PORT);
+  /* Greeting first: the tile install below can emit several toasts of its own,
+     and a welcome that arrives after them is not a welcome. */
+  notify_welcome();
 
   dlogf("dRPC5: stage=install\n");
   install_tile();

@@ -1,4 +1,4 @@
-#include "gw_common.h"
+#include "gw/gw_common.h"
 static size_t gw_append(char *out, size_t cap, size_t off, int *trunc,
                         const char *fmt, ...) {
   va_list ap;

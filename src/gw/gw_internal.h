@@ -1,7 +1,7 @@
 #pragma once
 
-#include "gateway.h"
-#include "curl_api.h"
+#include "gw/gateway.h"
+#include "core/curl_api.h"
 #include "core/curlx.h"
 
 #include <stddef.h>

@@ -11,7 +11,7 @@
 #include <sys/user.h>
 #include <unistd.h>
 
-#include "presence.h"
+#include "presence/presence.h"
 
 typedef struct app_info {
   uint32_t app_id;       /* 0x00 */

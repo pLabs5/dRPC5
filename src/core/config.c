@@ -1,7 +1,7 @@
 #define _GNU_SOURCE
-#include "config.h"
+#include "core/config.h"
 
-#include "bundled_ca.h"
+#include "generated/bundled_ca.h"
 #include "core/util.h"
 #include "paths.h"
 
@@ -19,7 +19,8 @@ const char * kConfigKeys[] = {
     "asset_key", "asset_text", "asset_small_key", "asset_small_text",
     "start_timestamp", "end_timestamp", "platform",
     "gw_os", "gw_browser", "gw_version", "gw_device",
-    "poll_ms", "hb_min_ms", "psn_retry_ms", "resync_ms", "reidentify_ms", NULL};
+    "poll_ms", "hb_min_ms", "psn_retry_ms", "resync_ms", "reidentify_ms",
+    "dns_servers", NULL};
 
 void write_ca(void) {
   FILE *f;
@@ -34,7 +35,8 @@ const char *kConfigDefaults[] = {
     "1", "1", "0", "1", "", "1", "1",
     "", "", "", "0", "", "", "", "", "", "", "ps5",
     "Playstation", "PS5 GameBase", "1.00", "PS5",
-    "10000", "5000", "30000", "600000", "150", NULL};
+    "10000", "5000", "30000", "600000", "150",
+    "1.1.1.1,8.8.8.8,9.9.9.9", NULL};
 
 #define NCFG_DEFAULTS ((int)(sizeof(kConfigDefaults) / sizeof(kConfigDefaults[0])) - 1)
 const int kConfigDefaultsN = NCFG_DEFAULTS;

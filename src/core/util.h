@@ -3,7 +3,6 @@
 #include <stddef.h>
 #include <time.h>
 
-void notifyf(const char *fmt, ...);
 /* Open the log file, truncating it if it has grown past LOG_MAX_BYTES. Call
    once at startup; dlogf() opens it on demand if this was never called. */
 void init_log(void);

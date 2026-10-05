@@ -1,10 +1,11 @@
 #define _GNU_SOURCE
-#include "api.h"
-#include "http.h"
+#include "http/api.h"
+#include "http/http.h"
 
 #include "core/config.h"
 #include "core/json.h"
 #include "core/util.h"
+#include "notify/notify.h"
 #include "paths.h"
 
 #include <arpa/inet.h>
@@ -17,6 +18,7 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int
@@ -341,11 +343,17 @@ int httpd_run(void) {
   }
   {
     char ip[64];
+    char url[96];
     lan_ip(ip, sizeof(ip));
-    dlogf("drpc5: config server on http://%s:%d/ (and 127.0.0.1)\n", ip,
-           DRPC_PORT);
-    dlogf("drpc5: paste a token from any device: http://%s:%d/pc.html\n", ip,
-           DRPC_PORT);
+    /* lan_ip() leaves "?" behind when no route is up yet. Fall back to
+       loopback so the address we print and announce is always one that works,
+       rather than a literal question mark. */
+    snprintf(url, sizeof(url), "http://%s:%d",
+             (ip[0] && strcmp(ip, "?")) ? ip : "127.0.0.1", DRPC_PORT);
+    dlogf("drpc5: config server on %s/ (and 127.0.0.1)\n", url);
+    dlogf("drpc5: paste a token from any device: %s/pc.html\n", url);
+    /* Sent after the bind succeeds, so this URL is live. */
+    notify_http_server(url);
   }
 
   for(;;) {

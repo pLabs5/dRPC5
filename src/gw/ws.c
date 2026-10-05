@@ -1,4 +1,4 @@
-#include "gw_common.h"
+#include "gw/gw_common.h"
 static void prop_str(const char *key, char *out, size_t cap,
                      const char *dflt) {
   if (cfg_get(key, out, cap) != 0 || out[0] == 0)
@@ -16,7 +16,7 @@ static void build_properties(char *out, size_t cap) {
      gw_version, gw_device. */
   prop_str("gw_os", os, sizeof(os), "Playstation");
   prop_str("gw_browser", browser, sizeof(browser), "PS5 GameBase");
-  prop_str("gw_version", version, sizeof(version), "1.00");
+  prop_str("gw_version", version, sizeof(version), kManifest.client_version);
   prop_str("gw_device", device, sizeof(device), "PS5");
 
   json_copy(e_os, sizeof(e_os), os);
@@ -46,6 +46,7 @@ int ws_send(CURL *easy, const char *frame) {
 
 int connect_ws(CURL *easy, const char *url) {
   struct curl_slist *hdrs = NULL;
+  struct curl_slist *pins;
   char props[512];
   char b64[768];
   CURLcode rc;
@@ -63,8 +64,11 @@ int connect_ws(CURL *easy, const char *url) {
     hdrs = curl_slist_append(hdrs, buf);
   }
 
+  pins = dns_pin_url(url);
+
   curl_easy_setopt(easy, CURLOPT_URL, url);
   curl_easy_setopt(easy, CURLOPT_HTTPHEADER, hdrs);
+  if (pins) curl_easy_setopt(easy, CURLOPT_RESOLVE, pins);
 curl_easy_setopt(easy, CURLOPT_CONNECT_ONLY, 2L);
     curl_setup(easy, 30000L, 0);
   err[0] = 0;
@@ -75,9 +79,19 @@ curl_easy_setopt(easy, CURLOPT_CONNECT_ONLY, 2L);
     dlogf("drpc5: gateway connect failed: %s\n",
            err[0] ? err : curl_easy_strerror(rc));
     curl_slist_free_all(hdrs);
+  /* The connection is up, so nothing will consult the pin again. Drop the
+     option before freeing the list it points at: libcurl keeps the pointer
+     until the option is replaced, so freeing first would leave it dangling. */
+  curl_easy_setopt(easy, CURLOPT_RESOLVE, NULL);
+  curl_slist_free_all(pins);
     return -1;
   }
   curl_slist_free_all(hdrs);
+  /* The connection is up, so nothing will consult the pin again. Drop the
+     option before freeing the list it points at: libcurl keeps the pointer
+     until the option is replaced, so freeing first would leave it dangling. */
+  curl_easy_setopt(easy, CURLOPT_RESOLVE, NULL);
+  curl_slist_free_all(pins);
   return 0;
 }
 
