@@ -64,12 +64,21 @@ LDADD  := -lSceIpmi -lSceAppInstUtil -lSceUserService -lSceSystemService -lpthre
 PKGSRC   := $(BUILD)/bundled_tile_pkg.c
 WEBSRC   := $(BUILD)/web_assets.c
 CASRC    := $(BUILD)/bundled_ca.c
-PAYLOAD_SRCS := src/main.c src/install.c src/core/json.c src/core/config.c \
-                src/core/util.c src/core/curlx.c src/http/server.c src/http/api.c \
-                src/gw/session.c src/gw/ws.c src/gw/activity.c \
-                src/gw/extasset.c src/gw/clock.c \
-                src/discord.c src/presence.c src/psn.c
-HEADERS  := $(wildcard src/*.h src/*/*.h)
+# Discovered, not listed: a hand-maintained list silently drops any new .c file
+# from the link because the payload is built in one command. eboot.c is excluded:
+# it is the standalone eboot entry point and supplies its own _start.
+PAYLOAD_SRCS := $(filter-out src/eboot.c, \
+                 $(sort $(wildcard src/main.c src/install.c src/*.c src/*/*.c)))
+HEADERS  := $(sort $(wildcard src/*.h src/*/*.h))
+
+# Header dependency tracking. Note the SDK's prospero-clang wrapper passes
+# --start-no-unused-arguments, which makes it drop -MMD, so no dRPC5.d is
+# actually produced with this SDK. HEADERS below still forces a rebuild when a
+# header changes, which is the correctness guarantee that matters here; the flag
+# is kept because toolchains without that wrapper do emit the depfile.
+DEPFLAGS := -MMD -MP
+.DELETE_ON_ERROR:
+-include dRPC5.d
 
 THIRD_PARTY := third_party
 CURL_INC    := $(THIRD_PARTY)/curl/include
@@ -82,7 +91,7 @@ CACERT      := $(THIRD_PARTY)/cacert.pem
 all: dRPC5.elf
 
 dRPC5.elf: $(PAYLOAD_SRCS) $(HEADERS) $(PKGSRC) $(WEBSRC) $(CASRC) $(CURL_LIBS)
-	$(CC) $(CFLAGS) $(LDFLAGS) -I$(BUILD) -I$(CURL_INC) -isystem $(THIRD_PARTY)/mbedtls/include -o $@ $(PAYLOAD_SRCS) $(PKGSRC) $(WEBSRC) $(CASRC) $(CURL_LIBS) $(LDADD)
+	$(CC) $(CFLAGS) $(DEPFLAGS) $(LDFLAGS) -I$(BUILD) -I$(CURL_INC) -isystem $(THIRD_PARTY)/mbedtls/include -o $@ $(PAYLOAD_SRCS) $(PKGSRC) $(WEBSRC) $(CASRC) $(CURL_LIBS) $(LDADD)
 
 $(BUILD)/embed: tools/embed.c
 	mkdir -p $(BUILD)

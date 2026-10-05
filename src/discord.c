@@ -47,18 +47,18 @@ int sceNetInit(void);
 static void net_init_once(void) {
   int rc, pool;
 
-  printf("net: stage=sceNetInit\n");
+  dlogf("net: stage=sceNetInit\n");
   rc = sceNetInit();
-  printf("net: sceNetInit rc=%d\n", rc);
+  dlogf("net: sceNetInit rc=%d\n", rc);
 
-  printf("net: stage=sceNetPoolCreate\n");
+  dlogf("net: stage=sceNetPoolCreate\n");
   pool = sceNetPoolCreate("drpc5_curl", 512 * 1024, 0);
-  printf("net: sceNetPoolCreate id=%d\n", pool);
+  dlogf("net: sceNetPoolCreate id=%d\n", pool);
   if (pool < 0) return;
 
-  printf("net: stage=curl_global_init\n");
+  dlogf("net: stage=curl_global_init\n");
   rc = curl_global_init(CURL_GLOBAL_DEFAULT);
-  printf("net: curl_global_init rc=%d\n", rc);
+  dlogf("net: curl_global_init rc=%d\n", rc);
   g_init_ok = (rc == CURLE_OK);
 }
 

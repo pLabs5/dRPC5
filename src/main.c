@@ -15,10 +15,10 @@
 static void *
 net_main(void *arg) {
   (void)arg;
-  printf("dRPC5: stage=discord_init\n");
-  printf("dRPC5: discord_init=%d\n", discord_init());
-  printf("dRPC5: stage=gateway\n");
-  printf("dRPC5: gateway_start=%d\n", gateway_start());
+  dlogf("dRPC5: stage=discord_init\n");
+  dlogf("dRPC5: discord_init=%d\n", discord_init());
+  dlogf("dRPC5: stage=gateway\n");
+  dlogf("dRPC5: gateway_start=%d\n", gateway_start());
   return NULL;
 }
 
@@ -28,7 +28,11 @@ main(int argc, char *argv[]) {
   (void)argv;
 
   setvbuf(stdout, NULL, _IONBF, 0);
+  /* Open the log before anything that can fail, so a broken install still
+     leaves a trace on disk rather than only in an unreachable stdout. */
+  init_log();
   mkdir(STORE_DIR, 0777);
+  dlogf("dRPC5: starting, pid %d", (int)getpid());
   load_prev_pid();
   write_ca();
   write_default_config();
@@ -41,7 +45,7 @@ main(int argc, char *argv[]) {
   }
   notifyf("dRPC5 running - 127.0.0.1:%d", DRPC_PORT);
 
-  printf("dRPC5: stage=install\n");
+  dlogf("dRPC5: stage=install\n");
   install_tile();
 
   {
@@ -52,9 +56,9 @@ main(int argc, char *argv[]) {
       net_main(NULL);
   }
 
-  printf("dRPC5: stage=httpd\n");
+  dlogf("dRPC5: stage=httpd\n");
   httpd_run();
-  printf("dRPC5: httpd exited\n");
+  dlogf("dRPC5: httpd exited\n");
   for(;;) pause();
   return 0;
 }

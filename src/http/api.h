@@ -1,3 +1,4 @@
 #pragma once
 
-void route(int fd, char *method, char *path, char *query, char *body);
+void route(int fd, char *method, char *path, char *query, char *body,
+            char *hdrs);

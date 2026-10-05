@@ -175,13 +175,13 @@ presence_foreground(ps5_app_t *out) {
   memset(out, 0, sizeof(*out));
 
   if(sysctl(mib, 4, NULL, &buf_size, NULL, 0) != 0 || buf_size == 0) {
-    printf("drpc5: sysctl size errno=%d\n", errno);
+    dlogf("drpc5: sysctl size errno=%d\n", errno);
     return -1;
   }
   buf = malloc(buf_size);
   if(!buf) return -1;
   if(sysctl(mib, 4, buf, &buf_size, NULL, 0) != 0) {
-    printf("drpc5: sysctl read errno=%d\n", errno);
+    dlogf("drpc5: sysctl read errno=%d\n", errno);
     free(buf);
     return -1;
   }

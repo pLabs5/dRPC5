@@ -62,20 +62,20 @@ void install_tile(void) {
   }
 
   if(mkdir(STORE_DIR, 0777)!=0 && errno!=EEXIST) {
-    printf("drpc5: mkdir " STORE_DIR " errno=%d\n", errno);
+    dlogf("drpc5: mkdir " STORE_DIR " errno=%d\n", errno);
     notifyf("dRPC5: mkdir failed (%d)", errno);
     return;
   }
   if(write_pkg()) {
-    printf("drpc5: could not write " PKG_PATH " errno=%d\n", errno);
+    dlogf("drpc5: could not write " PKG_PATH " errno=%d\n", errno);
     notifyf("dRPC5: pkg write failed (%d)", errno);
     return;
   }
-  printf("dRPC5: pkg written (%u bytes)\n", kTilePkgSize);
+  dlogf("dRPC5: pkg written (%u bytes)\n", kTilePkgSize);
   notifyf("dRPC5: pkg written (%u bytes)", kTilePkgSize);
 
   if((err=sceAppInstUtilInitialize())) {
-    printf("sceAppInstUtilInitialize: %x\n", err);
+    dlogf("sceAppInstUtilInitialize: %x\n", err);
     notifyf("dRPC5: install init 0x%x", err);
     return;
   }
@@ -83,11 +83,11 @@ void install_tile(void) {
 
   memset(&info, 0, sizeof(info));
   if((err=sceAppInstUtilAppInstallPkg(PKG_VISIBLE, &info))==0) {
-    printf("drpc5: tile installed\n");
+    dlogf("drpc5: tile installed\n");
     notifyf("dRPC5: tile installed");
     return;
   }
-  printf("sceAppInstUtilAppInstallPkg: %x\n", err);
+  dlogf("sceAppInstUtilAppInstallPkg: %x\n", err);
   notifyf("dRPC5: AppInstallPkg 0x%x", err);
 
   memset(&info2, 0, sizeof(info2));
@@ -98,10 +98,10 @@ void install_tile(void) {
   meta.content_name="dRPC5";
 
   if((err=sceAppInstUtilInstallByPackage(&meta, &info2, &playgo))==0) {
-    printf("drpc5: tile installed\n");
+    dlogf("drpc5: tile installed\n");
     notifyf("dRPC5: tile installed");
     return;
   }
-  printf("sceAppInstUtilInstallByPackage: %x\n", err);
+  dlogf("sceAppInstUtilInstallByPackage: %x\n", err);
   notifyf("dRPC5: InstallByPackage 0x%x", err);
 }

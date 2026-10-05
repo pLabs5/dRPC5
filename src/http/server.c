@@ -70,7 +70,9 @@ int peer_is_local(int fd) {
   struct sockaddr_in sin;
   socklen_t len = sizeof(sin);
 
-  if(getpeername(fd, (struct sockaddr *)&sin, &len) != 0) return 1;
+  /* Fail closed: an unidentifiable peer must not be treated as trusted. */
+  if(getpeername(fd, (struct sockaddr *)&sin, &len) != 0) return 0;
+  if(len < (socklen_t)sizeof(sin) || sin.sin_family != AF_INET) return 0;
   return (ntohl(sin.sin_addr.s_addr) >> 24) == 127;
 }
 
@@ -90,16 +92,74 @@ char * find_header(char *hdrs, const char *key) {
   return NULL;
 }
 
-int read_line_body(char *hdrs, size_t *hlen, int fd, char *body) {
+/* Live httpd connection threads. Read/written atomically from the accept loop
+   and from each handler as it exits. */
+static volatile int g_conns = 0;
+#define MAX_CONNS 16
+
+int read_line_body(char *hdrs, size_t *hlen, int fd, char **out_body) {
   long content_length = 0;
   char *cl;
   size_t body_len = 0;
+  char *body;
 
+  *out_body = NULL;
   hdrs[*hlen] = 0;
-  cl = find_header(hdrs, "Content-Length");
-  if(cl) content_length = strtol(cl, NULL, 10);
+
+  /* Search headers only. hdrs also holds the first chunk of the body, so a
+     find_header() over the whole buffer can pick up a "Content-Length:" line
+     out of the request body. */
+  {
+    char *hdr_end = strstr(hdrs, "\r\n\r\n");
+    char saved = hdr_end ? hdr_end[4] : 0;
+    if(hdr_end) hdr_end[4] = 0;
+    /* Chunked bodies are not decoded here, so treat them as unsupported
+       rather than silently acting on a Content-Length of 0. */
+    cl = find_header(hdrs, "Transfer-Encoding");
+    if(cl && strncasecmp(cl, "identity", 8) != 0) {
+      if(hdr_end) hdr_end[4] = saved;
+      return -1;
+    }
+    /* A duplicated Content-Length with differing values is a smuggling
+       attempt; refuse rather than pick one. */
+    {
+      char *a = find_header(hdrs, "Content-Length");
+      if(a) {
+        char first[32];
+        size_t i = 0;
+        char *b;
+        while(*a == ' ' || *a == '\t') a++;
+        while(i + 1 < sizeof(first) && a[i] >= '0' && a[i] <= '9') {
+          first[i] = a[i];
+          i++;
+        }
+        first[i] = 0;
+        content_length = i ? strtol(first, NULL, 10) : -1;
+        /* Second occurrence: compare against the first. */
+        b = strstr(a + i, "\r\nContent-Length");
+        if(b && strncasecmp(b + 2, "Content-Length", 14) == 0) {
+          char *v = b + 16; /* skip "\r\nContent-Length" */
+          if(*v == ':') v++;
+          long second;
+          while(*v == ' ' || *v == '\t') v++;
+          second = strtol(v, NULL, 10);
+          if(second != content_length) {
+            if(hdr_end) hdr_end[4] = saved;
+            return -1;
+          }
+        }
+      }
+    }
+    if(hdr_end) hdr_end[4] = saved;
+  }
   if(content_length < 0) content_length = 0;
   if(content_length > BODY_MAX) content_length = BODY_MAX;
+
+  /* No declared body means no buffer at all; every caller treats NULL as the
+     empty string, so this stays allocation-free for GET/HEAD requests. */
+  if(content_length == 0) return 0;
+  body = malloc((size_t)content_length + 1);
+  if(!body) return 0;
 
   {
     char *end = strstr(hdrs, "\r\n\r\n");
@@ -119,6 +179,7 @@ int read_line_body(char *hdrs, size_t *hlen, int fd, char *body) {
     body_len += (size_t)n;
   }
   body[body_len] = 0;
+  *out_body = body;
   return (int)body_len;
 }
 
@@ -131,14 +192,22 @@ void * handle_conn(void *arg) {
   char *query;
   size_t hlen = 0;
   ssize_t n;
+  struct timeval tv;
 
+  /* Without a receive deadline a client that connects and stalls pins this
+     thread and its 64KB of buffers forever. Bound every read and write. */
+  tv.tv_sec = 10;
+  tv.tv_usec = 0;
+  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+  setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+  /* The body buffer is only needed once a Content-Length is known, so defer
+     the 48KB allocation until a request actually declares a body. */
+  body = NULL;
   hdrs = malloc(HDR_MAX + 1);
-  body = malloc(BODY_MAX + 1);
-  if(!hdrs || !body) {
-    free(hdrs);
-    free(body);
+  if(!hdrs) {
     close(fd);
-    return NULL;
+    goto done;
   }
 
   for(;;) {
@@ -151,19 +220,22 @@ void * handle_conn(void *arg) {
   }
   if(!strstr(hdrs, "\r\n\r\n")) {
     free(hdrs);
-    free(body);
     close(fd);
-    return NULL;
+    goto done;
   }
 
   if(sscanf(hdrs, "%15s %1023s", method, path) != 2) {
     free(hdrs);
-    free(body);
     close(fd);
-    return NULL;
+    goto done;
   }
 
-  read_line_body(hdrs, &hlen, fd, body);
+  if(read_line_body(hdrs, &hlen, fd, &body) < 0) {
+    send_json(fd, 400, "{\"error\":\"bad request framing\"}");
+    free(hdrs);
+    close(fd);
+    goto done;
+  }
 
   query = strchr(path, '?');
   if(query) {
@@ -171,11 +243,13 @@ void * handle_conn(void *arg) {
     query++;
   }
 
-  route(fd, method, path, query, body);
+  route(fd, method, path, query, body ? body : "", hdrs);
 
   free(hdrs);
   free(body);
   close(fd);
+done:
+  __atomic_fetch_sub(&g_conns, 1, __ATOMIC_RELAXED);
   return NULL;
 }
 
@@ -199,16 +273,21 @@ void load_prev_pid(void) {
 static void
 kill_stale(void) {
   if (prev_pid <= 1 || prev_pid == (int)getpid()) {
-    printf("dRPC5: no previous instance recorded\n");
+    dlogf("dRPC5: no previous instance recorded\n");
     return;
   }
   if (kill(prev_pid, 0) < 0) {
-    printf("dRPC5: pid %d not running (errno %d)\n", prev_pid, errno);
+    dlogf("dRPC5: pid %d not running (errno %d)\n", prev_pid, errno);
     return;
   }
-  printf("dRPC5: killing stale instance pid %d\n", prev_pid);
+  /* The pid is written by our own pid file and only ever read back on the
+     EADDRINUSE path, which means the port is provably held by the previous
+     instance. A cmdline check was tried here but does not work: an injected
+     payload's /proc/<pid>/cmdline carries no program name, so it never matches
+     and the stale instance can never be replaced. */
+  dlogf("dRPC5: killing stale instance pid %d\n", prev_pid);
   if (kill(prev_pid, SIGKILL) < 0)
-    printf("dRPC5: kill(%d) failed: %d\n", prev_pid, errno);
+    dlogf("dRPC5: kill(%d) failed: %d\n", prev_pid, errno);
 }
 
 void lan_ip(char *out, size_t cap) {
@@ -245,13 +324,13 @@ int httpd_run(void) {
     int tries;
     for(tries = 0; tries < 15; tries++) {
       if(bind(lfd, (struct sockaddr *)&addr, sizeof(addr)) == 0) break;
-      printf("drpc5: bind failed: %d (try %d)\n", errno, tries + 1);
+      dlogf("drpc5: bind failed: %d (try %d)\n", errno, tries + 1);
       if(errno != EADDRINUSE) { close(lfd); return -1; }
       if(tries == 0) kill_stale();
       sleep(1);
     }
     if(tries == 15) {
-      printf("drpc5: port %d busy - another dRPC5 instance is running\n", DRPC_PORT);
+      dlogf("drpc5: port %d busy - another dRPC5 instance is running\n", DRPC_PORT);
       close(lfd);
       return -1;
     }
@@ -263,9 +342,9 @@ int httpd_run(void) {
   {
     char ip[64];
     lan_ip(ip, sizeof(ip));
-    printf("drpc5: config server on http://%s:%d/ (and 127.0.0.1)\n", ip,
+    dlogf("drpc5: config server on http://%s:%d/ (and 127.0.0.1)\n", ip,
            DRPC_PORT);
-    printf("drpc5: paste a token from any device: http://%s:%d/pc.html\n", ip,
+    dlogf("drpc5: paste a token from any device: http://%s:%d/pc.html\n", ip,
            DRPC_PORT);
   }
 
@@ -276,10 +355,21 @@ int httpd_run(void) {
       if(errno == EINTR) continue;
       break;
     }
+    /* One thread per connection with no ceiling: enough stalled clients would
+       exhaust the heap and thread map over a multi-day uptime. Refuse the
+       excess instead of accepting work that cannot be serviced. */
+    if(__atomic_load_n(&g_conns, __ATOMIC_RELAXED) >= MAX_CONNS) {
+      dlogf("drpc5: refusing connection, %d already active", MAX_CONNS);
+      close(cfd);
+      continue;
+    }
+    __atomic_fetch_add(&g_conns, 1, __ATOMIC_RELAXED);
     if(pthread_create(&th, NULL, handle_conn, (void *)(intptr_t)cfd) == 0)
       pthread_detach(th);
-    else
+    else {
+      __atomic_fetch_sub(&g_conns, 1, __ATOMIC_RELAXED);
       close(cfd);
+    }
   }
   close(lfd);
   return -1;

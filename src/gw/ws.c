@@ -72,7 +72,7 @@ curl_easy_setopt(easy, CURLOPT_CONNECT_ONLY, 2L);
 
   rc = curl_easy_perform(easy);
   if (rc != CURLE_OK) {
-    printf("drpc5: gateway connect failed: %s\n",
+    dlogf("drpc5: gateway connect failed: %s\n",
            err[0] ? err : curl_easy_strerror(rc));
     curl_slist_free_all(hdrs);
     return -1;
@@ -139,6 +139,9 @@ int clear_presence(CURL *easy) {
   return ws_send(easy, frame);
 }
 
+/* Only codes that mean "this token will never work again" belong here. 4007
+   (invalid seq) and 4009 (invalid gateway version) are recoverable but not
+   resumable: session.c handles those separately by discarding the session. */
 int non_resumable(int code) {
   return code == 4004 || code == 4010 || code == 4011 || code == 4012 ||
          code == 4013 || code == 4014;

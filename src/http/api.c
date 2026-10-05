@@ -13,9 +13,11 @@
 #include "psn.h"
 #include "web.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -28,6 +30,7 @@ handle_status(int fd) {
   char activity[192];
   char ip[64];
   size_t off = 0;
+  int overflow = 0;
   int has_token = stat(TOKEN_PATH, &st) == 0;
   int installed = stat(APPMETA_PATH, &st) == 0;
   int gw_connected = 0;
@@ -37,14 +40,14 @@ handle_status(int fd) {
   gateway_status(&gw_connected, &gw_ready, &gw_auth_failed, activity, sizeof(activity));
   lan_ip(ip, sizeof(ip));
 
-  off += (size_t)snprintf(json + off, sizeof(json) - off,
-                          "{\"installed\":%d,\"port\":%d,\"has_token\":%d,"
-                          "\"ip\":\"%s\","
-                          "\"gateway\":{\"connected\":%d,\"ready\":%d,"
-                          "\"auth_failed\":%d,\"activity\":\"%s\"},"
-                          "\"config\":{",
-                          installed, DRPC_PORT, has_token, ip, gw_connected,
-                          gw_ready, gw_auth_failed, activity);
+  json_append(json, sizeof(json), &off, &overflow,
+              "{\"installed\":%d,\"port\":%d,\"has_token\":%d,"
+              "\"ip\":\"%s\","
+              "\"gateway\":{\"connected\":%d,\"ready\":%d,"
+              "\"auth_failed\":%d,\"activity\":\"%s\"},"
+              "\"config\":{",
+              installed, DRPC_PORT, has_token, ip, gw_connected,
+              gw_ready, gw_auth_failed, activity);
   cfg[0] = 0;
   read_file_all(CONFIG_PATH, cfg, sizeof(cfg), NULL);
   {
@@ -57,13 +60,15 @@ handle_status(int fd) {
       if(cfg_lookup(cfg, kConfigKeys[i], buf, sizeof(buf)) == 0 && buf[0])
         val = buf;
       json_escape(esc, sizeof(esc), val);
-      off += (size_t)snprintf(json + off, sizeof(json) - off,
-                              "%s\"%s\":\"%s\"", first ? "" : ",",
-                              kConfigKeys[i], esc);
+      if(json_append(json, sizeof(json), &off, &overflow,
+                     "%s\"%s\":\"%s\"", first ? "" : ",",
+                     kConfigKeys[i], esc))
+        break;
       first = 0;
     }
   }
-  off += (size_t)snprintf(json + off, sizeof(json) - off, "}}");
+  json_append(json, sizeof(json), &off, &overflow, "}}");
+  if(overflow) dlogf("drpc5: /api/status response truncated");
   send_json(fd, 200, json);
 }
 
@@ -72,35 +77,43 @@ handle_config(int fd, const char *body) {
   char json[8192];
   char cfg[4096];
   char val[256];
+  char out[16384];
   size_t off = 0;
-  FILE *f;
   int i;
 
   cfg[0] = 0;
   read_file_all(CONFIG_PATH, cfg, sizeof(cfg), NULL);
   mkdir(STORE_DIR, 0777);
-  if((f = fopen(CONFIG_PATH, "w")) == NULL) {
-    send_json(fd, 500, "{\"error\":\"cannot write config\"}");
-    return;
-  }
+  /* Build the whole file in memory, then swap it in with one rename so the
+     gateway thread never reads a half-written config. */
   for(i = 0; kConfigKeys[i]; i++) {
+    int w;
     if(json_get(body, kConfigKeys[i], val, sizeof(val)) != 0 &&
        cfg_lookup(cfg, kConfigKeys[i], val, sizeof(val)) != 0)
       snprintf(val, sizeof(val), "%s",
                i < kConfigDefaultsN && kConfigDefaults[i] ? kConfigDefaults[i]
                                                        : "");
     sanitize_value(val, sizeof(val));
-    fprintf(f, "%s=%s\n", kConfigKeys[i], val);
+    w = snprintf(out + off, sizeof(out) - off, "%s=%s\n", kConfigKeys[i], val);
+    /* Stop on truncation rather than retrying from out[0], which would drop
+       every earlier key and leave a config that looks valid but is not. */
+    if(w < 0 || (size_t)w >= sizeof(out) - off) {
+      send_json(fd, 500, "{\"error\":\"config too large\"}");
+      return;
+    }
+    off += (size_t)w;
   }
-  fclose(f);
-  off += (size_t)snprintf(json + off, sizeof(json) - off, "{\"ok\":1}");
+  if(write_file_atomic(CONFIG_PATH, out, off, 0644) != 0) {
+    send_json(fd, 500, "{\"error\":\"cannot write config\"}");
+    return;
+  }
+  json_append(json, sizeof(json), &off, NULL, "{\"ok\":1}");
   send_json(fd, 200, json);
 }
 
 static void
 handle_token(int fd, const char *body) {
   char token[600];
-  FILE *f;
 
   if(json_get(body, "token", token, sizeof(token)) != 0 || !token[0]) {
     send_json(fd, 400, "{\"error\":\"missing token\"}");
@@ -112,13 +125,12 @@ handle_token(int fd, const char *body) {
     return;
   }
   mkdir(STORE_DIR, 0777);
-  if((f = fopen(TOKEN_PATH, "w")) == NULL) {
+  /* 0600 before the bytes are written, and atomic: a torn token would still
+     pass read_token's length check and permanently break gateway auth. */
+  if(write_file_atomic(TOKEN_PATH, token, strlen(token), 0600) != 0) {
     send_json(fd, 500, "{\"error\":\"cannot write token\"}");
     return;
   }
-  fwrite(token, 1, strlen(token), f);
-  fclose(f);
-  chmod(TOKEN_PATH, 0600);
   send_json(fd, 200, "{\"ok\":1}");
 }
 
@@ -180,9 +192,12 @@ handle_discord(int fd, const char *body) {
     return;
   }
   {
-    size_t off = (size_t)snprintf(out, JSON_MAX, "{\"status\":%d,\"body\":\"",
-                                  status);
-    off += json_escape(out + off, JSON_MAX - off, resp);
+    size_t off = 0;
+    int overflow = 0;
+    json_append(out, JSON_MAX, &off, &overflow,
+                "{\"status\":%d,\"body\":\"", status);
+    if(!overflow) json_escape(out + off, JSON_MAX - off, resp);
+    if(overflow) dlogf("drpc5: /api/discord response truncated");
     if(off + 3 < JSON_MAX) {
       out[off++] = '"';
       out[off++] = '}';
@@ -210,7 +225,7 @@ handle_ra_start(int fd, const char *body) {
   id = ra_start(pubkey, err, sizeof(err));
   if(id < 0) {
     size_t off = 0;
-    off += (size_t)snprintf(json + off, sizeof(json) - off, "{\"error\":\"");
+    json_append(json, sizeof(json), &off, NULL, "{\"error\":\"");
     json_escape(json + off, sizeof(json) - off,
                 err[0] ? err : "start failed");
     strcat(json, "\"}");
@@ -296,6 +311,7 @@ handle_presence(int fd) {
   char esc[512];
   char json[4096];
   size_t off = 0;
+  int overflow = 0;
 
   if(presence_foreground(&app) != 0) {
     send_json(fd, 200, "{\"active\":0}");
@@ -303,24 +319,23 @@ handle_presence(int fd) {
   }
 
   json_escape(esc, sizeof(esc), app.title_id);
-  off += (size_t)snprintf(json + off, sizeof(json) - off,
-                          "{\"active\":1,\"pid\":%d,\"app_id\":%u,"
-                          "\"running\":%d,"
-                          "\"start_timestamp\":%lld,\"title_id\":\"%s\",",
-                          app.pid, (unsigned)app.app_id,
-                          app.running,
-                          (long long)app.start_epoch, esc);
+  json_append(json, sizeof(json), &off, &overflow,
+              "{\"active\":1,\"pid\":%d,\"app_id\":%u,"
+              "\"running\":%d,"
+              "\"start_timestamp\":%lld,\"title_id\":\"%s\",",
+              app.pid, (unsigned)app.app_id,
+              app.running,
+              (long long)app.start_epoch, esc);
 
   json_escape(esc, sizeof(esc), app.name);
-  off += (size_t)snprintf(json + off, sizeof(json) - off, "\"name\":\"%s\",",
-                          esc);
+  json_append(json, sizeof(json), &off, &overflow, "\"name\":\"%s\",", esc);
 
   json_escape(esc, sizeof(esc), app.version);
-  off += (size_t)snprintf(json + off, sizeof(json) - off, "\"version\":\"%s\",",
-                          esc);
+  json_append(json, sizeof(json), &off, &overflow, "\"version\":\"%s\",", esc);
 
   json_escape(esc, sizeof(esc), app.icon_path);
-  snprintf(json + off, sizeof(json) - off, "\"icon\":\"%s\"}", esc);
+  json_append(json, sizeof(json), &off, &overflow, "\"icon\":\"%s\"}", esc);
+  if(overflow) dlogf("drpc5: /api/presence response truncated");
   send_json(fd, 200, json);
 }
 
@@ -378,7 +393,76 @@ static int lan_allowed(const char *method, const char *path) {
          !strcmp(path, "/qrcode.js") || !strcmp(path, "/api/status");
 }
 
-void route(int fd, char *method, char *path, char *query, char *body) {
+/* Reject requests a browser could have induced from another site. The config
+   server is plain HTTP on loopback, so a page on the internet can reach it via
+   the user's browser; without these checks the browser's loopback peer passes
+   peer_is_local() and any site could rewrite config or read the token page. */
+/* True when `origin` is an origin this server itself could have served, i.e.
+   loopback over http/https. The LAN address is deliberately not accepted: it is
+   reachable from other machines, and a page on those machines must not be able
+   to drive the console through the browser. */
+static int own_origin(const char *origin) {
+  static const char *const hosts[] = {"127.0.0.1", "localhost", NULL};
+  size_t i;
+
+  if(strncasecmp(origin, "http://", 7) != 0 &&
+     strncasecmp(origin, "https://", 8) != 0)
+    return 0;
+  origin += strncasecmp(origin, "https://", 8) == 0 ? 8 : 7;
+  /* Host ends at '/', ':' or end of value. */
+  for(i = 0; hosts[i]; i++) {
+    size_t hl = strlen(hosts[i]);
+    if(strncasecmp(origin, hosts[i], hl) == 0 &&
+       (origin[hl] == 0 || origin[hl] == '/' || origin[hl] == ':'))
+      return 1;
+  }
+  return 0;
+}
+
+/* Reject requests a browser could have induced from another site. The config
+   server is plain HTTP on loopback, so a page on the internet can reach it via
+   the user's browser; without these checks the browser's loopback peer passes
+   peer_is_local() and any site could rewrite config or read the token page.
+   Returns 1 to block. */
+static int cross_site(char *hdrs) {
+  char *v;
+
+  if(!hdrs) return 0;
+  v = find_header(hdrs, "Sec-Fetch-Site");
+  if(v) {
+    while(*v == ' ' || *v == '\t') v++;
+    if(!strncasecmp(v, "cross-site", 10) || !strncasecmp(v, "same-site", 9))
+      return 1;
+  }
+  /* Origin, when present, must be one of our own. "null" is an opaque origin
+     (sandboxed iframe, file://, some redirects) and is never us. A missing
+     Origin on a same-origin GET is normal, so absence alone is not a reason
+     to block. */
+  v = find_header(hdrs, "Origin");
+  if(v) {
+    char origin[128];
+    size_t i = 0;
+    while(*v == ' ' || *v == '\t') v++;
+    while(v[i] && !isspace((unsigned char)v[i]) && v[i] != '\r' &&
+          v[i] != '\n' && i + 1 < sizeof(origin)) {
+      origin[i] = v[i];
+      i++;
+    }
+    origin[i] = 0;
+    if(!own_origin(origin)) {
+      dlogf("drpc5: rejected cross-origin request from %s", origin);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+void route(int fd, char *method, char *path, char *query, char *body,
+           char *hdrs) {
+  if(cross_site(hdrs)) {
+    send_json(fd, 403, "{\"error\":\"cross-site request blocked\"}");
+    return;
+  }
   if(!peer_is_local(fd)) {
     if(!strcmp(path, "/") || !strcmp(path, "/index.html")) {
       send_redirect(fd, "/pc.html");

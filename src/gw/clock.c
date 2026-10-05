@@ -73,7 +73,7 @@ curl_easy_setopt(h, CURLOPT_RESOLVE, pins);
   if (ep <= 0) return;
   off = ep - (long long)time(NULL);
   if (!g_time_known || off != g_time_off)
-    printf("drpc5: clock offset %llds\n", off);
+    dlogf("drpc5: clock offset %llds\n", off);
   g_time_off = off;
   g_time_known = 1;
 }

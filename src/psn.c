@@ -434,18 +434,18 @@ static void *psn_worker(void *arg) {
       strncmp(cached, "mp:", 3) != 0) {
     snprintf(url, sizeof(url), "%s", cached);
   } else if (fetch_art(job.concept_id, job.content_id, url, sizeof(url)) != 0) {
-    printf("drpc5: art %s lookup failed\n", job.title_id);
+    dlogf("drpc5: art %s lookup failed\n", job.title_id);
     goto done;
   }
 
   if (g_proxy && g_proxy(url, proxied, sizeof(proxied)) == 0) {
-    printf("drpc5: art %s %s\n", job.title_id, proxied);
+    dlogf("drpc5: art %s %s\n", job.title_id, proxied);
     cache_put(job.title_id, proxied);
   } else if (strcmp(url, cached) != 0) {
-    printf("drpc5: art %s raw %s\n", job.title_id, url);
+    dlogf("drpc5: art %s raw %s\n", job.title_id, url);
     cache_put(job.title_id, url);
   } else {
-    printf("drpc5: art %s proxy retry\n", job.title_id);
+    dlogf("drpc5: art %s proxy retry\n", job.title_id);
   }
 
 done:

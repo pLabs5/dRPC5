@@ -11,6 +11,8 @@ void send_response(int fd, int code, const char *reason, const char *ctype,
 void send_json(int fd, int code, const char *json);
 void send_redirect(int fd, const char *loc);
 int peer_is_local(int fd);
+char *find_header(char *hdrs, const char *key);
+int read_line_body(char *hdrs, size_t *hlen, int fd, char **out_body);
 void lan_ip(char *out, size_t cap);
 void load_prev_pid(void);
 void *handle_conn(void *arg);

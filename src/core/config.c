@@ -24,7 +24,7 @@ const char * kConfigKeys[] = {
 void write_ca(void) {
   FILE *f;
   if ((f = fopen(CA_PATH, "wb"))) {
-    if (fwrite(kCaPem, 1, kCaPemSize, f) != kCaPemSize) printf("drpc5: short write " CA_PATH "\n");
+    if (fwrite(kCaPem, 1, kCaPemSize, f) != kCaPemSize) dlogf("drpc5: short write " CA_PATH "\n");
     fclose(f);
   }
 }
@@ -69,7 +69,7 @@ int cfg_lookup(const char *cfg, const char *key, char *out, size_t cap) {
 void write_default_config(void) {
   char cfg[4096];
   char val[256];
-  char out[4096];
+  char out[12288];
   size_t n = 0;
   size_t off = 0;
   struct stat st;
@@ -90,13 +90,18 @@ void write_default_config(void) {
         snprintf(val, sizeof(val), "%s", kConfigDefaults[i]);
     }
     w = snprintf(out + off, sizeof(out) - off, "%s=%s\n", kConfigKeys[i], val);
-    if(w > 0 && (size_t)w < sizeof(out) - off) off += (size_t)w;
+    /* On truncation, leaving off unchanged makes the next iteration overwrite
+       from out[0], which drops earlier keys and can leave a config holding only
+       the last key. Stop instead. */
+    if(w < 0 || (size_t)w >= sizeof(out) - off) {
+      dlogf("drpc5: config too large, not rewriting defaults\n");
+      return;
+    }
+    off += (size_t)w;
   }
   if(off == n && n && !memcmp(cfg, out, off)) return;
-  if((f = fopen(CONFIG_PATH, "w")) == NULL) return;
-  fwrite(out, 1, off, f);
-  fclose(f);
-  printf("drpc5: config filled with defaults\n");
+  if(write_file_atomic(CONFIG_PATH, out, off, 0644) != 0) return;
+  dlogf("drpc5: config filled with defaults\n");
 }
 
 void sanitize_value(char *v, size_t cap) {
@@ -123,6 +128,13 @@ int cfg_get(const char *key, char *out, size_t cap) {
   if (!f) return -1;
   while (fgets(line, sizeof(line), f)) {
     char *nl = strpbrk(line, "\r\n");
+    /* A line that filled the buffer without a newline continues; skip the rest
+       of it, otherwise its tail is parsed as a fresh "key=value" pair. */
+    if (!nl && !feof(f)) {
+      int c;
+      while ((c = fgetc(f)) != EOF && c != '\n') { }
+      continue;
+    }
     if (nl) *nl = 0;
     if (strncmp(line, key, klen) != 0 || line[klen] != '=') continue;
     snprintf(out, cap, "%s", line + klen + 1);
@@ -166,13 +178,25 @@ long long cfg_clamped(const char *key, long long dflt, long long lo,
 }
 
 int read_token(char *out, size_t cap) {
-  int n;
+  int n, overflow = 0;
 
   if (cap == 0) return -1;
   out[0] = 0;
-  n = read_file_all(TOKEN_PATH, out, cap, NULL);
+  n = read_file_ex(TOKEN_PATH, out, cap, NULL, &overflow);
   if (n < 0) return -1;
+  /* A token that did not fit is truncated and would be sent to Discord as a
+     bad credential, which looks exactly like an expired token. Fail loudly
+     instead: a token this long means TOKEN_PATH is not what we think it is. */
+  if (overflow) {
+    dlogf("drpc5: token exceeds %d bytes, refusing to use it", (int)cap);
+    out[0] = 0;
+    return -1;
+  }
   while (n > 0 && (out[n - 1] == '\n' || out[n - 1] == '\r' || out[n - 1] == ' '))
     out[--n] = 0;
-  return n >= 20 ? 0 : -1;
+  if (n < 20) {
+    dlogf("drpc5: token is only %d bytes, too short to be valid", n);
+    return -1;
+  }
+  return 0;
 }

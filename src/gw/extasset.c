@@ -68,7 +68,7 @@ curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
   curl_slist_free_all(pins);
 
   if (rc != CURLE_OK || code < 200 || code >= 300) {
-    printf("drpc5: external-assets rc=%d http=%ld\n", (int)rc, code);
+    dlogf("drpc5: external-assets rc=%d http=%ld\n", (int)rc, code);
     return -1;
   }
 

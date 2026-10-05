@@ -30,3 +30,9 @@
 #ifndef CA_PATH
 #define CA_PATH      STORE_DIR "/cacert.pem"
 #endif
+#ifndef LOG_PATH
+#define LOG_PATH     STORE_DIR "/drpc5.log"
+#endif
+#ifndef LOG_MAX_BYTES
+#define LOG_MAX_BYTES (256 * 1024)
+#endif

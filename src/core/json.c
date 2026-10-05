@@ -2,6 +2,7 @@
 #include "json.h"
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -146,21 +147,17 @@ size_t json_escape(char *dst, size_t cap, const char *src) {
 }
 
 int json_get(const char *body, const char *key, char *out, size_t cap) {
-  char pat[80];
-  const char *p;
-  const char *end;
+  const char *p, *end;
   size_t o = 0;
 
   if(cap == 0) return -1;
   out[0] = 0;
-  snprintf(pat, sizeof(pat), "\"%s\"", key);
-  p = strstr(body, pat);
+  /* A request with no body reaches the handlers as NULL. */
+  if(!body) return -1;
+  /* obj_find only matches a real member of the top-level object, so a key that
+     merely appears inside another key's string value cannot be picked up. */
+  p = obj_find(body, key);
   if(!p) return -1;
-  p += strlen(pat);
-  while(*p == ' ' || *p == '\t') p++;
-  if(*p != ':') return -1;
-  p++;
-  while(*p == ' ' || *p == '\t') p++;
 
   if(*p == '"') {
     p++;
@@ -178,9 +175,29 @@ int json_get(const char *body, const char *key, char *out, size_t cap) {
     return 0;
   }
 
-  end = p;
-  while(*end && *end != ',' && *end != '}' && *end != '\r' && *end != '\n')
-    end++;
+  /* Scan a bare value to its end, tracking nesting and strings so an object or
+     array value stops at the matching close instead of running to the next
+     comma at depth 0. */
+  {
+    int depth = 0, instr = 0;
+    end = p;
+    for(; *end; end++) {
+      char c = *end;
+      if(instr) {
+        if(c == '\\') { end++; continue; }
+        if(c == '"') instr = 0;
+        continue;
+      }
+      if(c == '"') { instr = 1; continue; }
+      if(c == '{' || c == '[') { depth++; continue; }
+      if(c == '}' || c == ']') {
+        if(depth == 0) break;
+        depth--;
+        continue;
+      }
+      if(c == ',' && depth == 0) break;
+    }
+  }
   while(end > p && (end[-1] == ' ' || end[-1] == '\t')) end--;
   o = (size_t)(end - p);
   if(o >= cap) o = cap - 1;
@@ -205,5 +222,28 @@ int qs_get(const char *query, const char *key, char *out, size_t cap) {
   while(*end && *end != '&') end++;
   while(p < end && o + 1 < cap) out[o++] = *p++;
   out[o] = 0;
+  return 0;
+}
+int json_append(char *buf, size_t cap, size_t *off, int *out_overflow,
+                const char *fmt, ...) {
+  va_list ap;
+  int n;
+
+  if(!buf || !off || cap == 0) return 1;
+  if(*off > cap - 1) *off = cap - 1;
+  va_start(ap, fmt);
+  n = vsnprintf(buf + *off, cap - *off, fmt, ap);
+  va_end(ap);
+  if(n < 0) {
+    if(out_overflow) *out_overflow = 1;
+    return 1;
+  }
+  if((size_t)n >= cap - *off) {
+    /* Truncated: clamp to what actually fit so the next call is still bounded. */
+    *off = cap - 1;
+    if(out_overflow) *out_overflow = 1;
+    return 1;
+  }
+  *off += (size_t)n;
   return 0;
 }

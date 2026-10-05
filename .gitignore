@@ -5,6 +5,7 @@ ps5-payload-sdk/
 dist/
 *.o
 dRPC5.elf
+dRPC5.d
 
 # //--- editor junk ---\\ #
 *.kate-swp

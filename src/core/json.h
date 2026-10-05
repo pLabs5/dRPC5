@@ -10,5 +10,15 @@ int json_read_str(const char *v, char *out, size_t cap);
 const char *obj_find(const char *obj, const char *key);
 const char *json_obj(const char *frame, const char *key);
 size_t json_escape(char *dst, size_t cap, const char *src);
+/* Bounded append used to build JSON into a fixed buffer. Never writes past
+   buf[cap-1] and keeps *off <= cap-1 even when the formatted text is longer, so
+   `buf + off` and `cap - off` stay valid for every following append. snprintf's
+   return value is the length it *would* have written, so accumulating it
+   directly lets off run past the buffer and underflow the remaining capacity.
+   Sets *out_overflow when output was dropped, and returns 1 if there is now no
+   room left. */
+int json_append(char *buf, size_t cap, size_t *off, int *out_overflow,
+                const char *fmt, ...)
+    __attribute__((format(printf, 5, 6)));
 int json_get(const char *body, const char *key, char *out, size_t cap);
 int qs_get(const char *query, const char *key, char *out, size_t cap);

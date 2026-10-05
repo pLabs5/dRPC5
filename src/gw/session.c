@@ -7,6 +7,7 @@ struct {
   int connected;
   int ready;
   int auth_failed;
+  int in_sync;
   char activity[192];
   char status[32];
   char frame[GW_FRAME];
@@ -15,6 +16,10 @@ struct {
 } g_gw;
 
 char g_gw_msg[GW_MSG];
+
+/* Last thing we successfully published, so the log records transitions
+   instead of one identical line every poll_ms. */
+static char g_last_pub[192];
 
 static unsigned long long rng_next(void) {
   unsigned long long x = g_gw.rng;
@@ -93,6 +98,7 @@ static int session_once(const char *token, const char *resume_url,
   int got_ready = 0;
   int want_resume = session_id && session_id[0];
   int acked = 1;
+  int need_sync = 0;
   int rc = GW_RET_RETRY;
   int close_code = 0;
   char cached[GW_FRAME];
@@ -128,6 +134,8 @@ static int session_once(const char *token, const char *resume_url,
     next_hb = now_ms() + (jitter > 0 ? jitter : 1);
   }
   next_check = now_ms();
+  /* No heartbeat is outstanding yet, so start acked. */
+  acked = 1;
 
   pthread_mutex_lock(&g_gw.mu);
   g_gw.connected = 1;
@@ -163,7 +171,7 @@ static int session_once(const char *token, const char *resume_url,
     }
     if (now >= next_hb) {
       if (!acked) {
-        printf("drpc5: gateway heartbeat unacked, reconnecting\n");
+        dlogf("drpc5: gateway heartbeat unacked, reconnecting");
         rc = GW_RET_RETRY;
         break;
       }
@@ -190,6 +198,10 @@ static int session_once(const char *token, const char *resume_url,
     }
 
     if (p.revents & (POLLHUP | POLLIN)) {
+      /* Set whenever the recv loop below decides to stop. `rc` cannot signal
+         this itself: it starts at GW_RET_RETRY, so "still going" and
+         "retry after CLOSE" are indistinguishable by value. */
+      int done = 0;
       for (;;) {
         size_t n = 0;
         const struct curl_ws_frame *meta = NULL;
@@ -199,16 +211,18 @@ static int session_once(const char *token, const char *resume_url,
         size_t avail = GW_MSG - 1 - blen;
 
         if (avail == 0) {
-          printf("drpc5: gateway frame too large (%u), retrying\n",
-                 (unsigned)blen);
+          dlogf("drpc5: gateway frame too large (%llu), retrying",
+                (unsigned long long)blen);
           blen = 0;
           rc = GW_RET_RETRY;
+          done = 1;
           break;
         }
         cr = curl_ws_recv(easy, buf + blen, avail, &n, &meta);
         if (cr != CURLE_OK) {
           if (cr == CURLE_AGAIN) break;
           rc = GW_RET_RETRY;
+          done = 1;
           break;
         }
         if (meta && (meta->flags & CURLWS_CLOSE)) {
@@ -217,13 +231,28 @@ static int session_once(const char *token, const char *resume_url,
                              (int)(unsigned char)buf[blen + 1])
                           : 1005;
           if (non_resumable(close_code)) {
-            printf("drpc5: gateway closed with fatal code %d\n", close_code);
+            dlogf("drpc5: gateway closed with fatal code %d", close_code);
             if (close_code == 4004)
-              printf("drpc5: token rejected, sign in again\n");
+              dlogf("drpc5: token rejected, sign in again");
             rc = GW_RET_FATAL;
-          } else {
-            printf("drpc5: gateway closed with code %d, retrying\n", close_code);
+            done = 1;
+          } else if (close_code == 4007 || close_code == 4009) {
+            /* 4007 means our session_id/seq pair is stale, 4009 that the
+               gateway version was refused. Resuming with the same values fails
+               identically, so drop the session and identify fresh instead of
+               burning GW_RESET_SESSION_AFTER attempts on it. */
+            dlogf("drpc5: gateway closed %d, discarding session",
+                 close_code);
+            hb_sid[0] = 0;
+            hb_url[0] = 0;
+            hb_seq = -1;
+            want_resume = 0;
             rc = GW_RET_RETRY;
+            done = 1;
+          } else {
+            dlogf("drpc5: gateway closed with code %d, retrying", close_code);
+            rc = GW_RET_RETRY;
+            done = 1;
           }
           break;
         }
@@ -232,7 +261,6 @@ static int session_once(const char *token, const char *resume_url,
         if (n == avail || (meta->flags & CURLWS_OFFSET) || meta->bytesleft > 0)
           continue;
         buf[blen] = 0;
-        n = blen;
         blen = 0;
 
         if (frame_op(buf, &op) != 0) continue;
@@ -242,6 +270,10 @@ static int session_once(const char *token, const char *resume_url,
           long hb_floor = (long)cfg_clamped("hb_min_ms", 5000, 1000, 60000);
           if (iv > 0) hb_ms = iv;
           if (hb_ms < hb_floor) hb_ms = hb_floor;
+          /* A HELLO starts a fresh heartbeat cycle. Clearing acked here stops
+             the next tick from dropping a healthy connection because a
+             heartbeat from the previous cycle never got its op 11 back. */
+          acked = 1;
           {
             long long jitter =
                 (long long)hb_ms * (long long)(rng_next() % 1000) / 1000;
@@ -250,14 +282,16 @@ static int session_once(const char *token, const char *resume_url,
           if (want_resume && hb_sid[0]) {
             if (send_resume(easy, token, hb_sid, hb_seq) != 0) {
               rc = GW_RET_RETRY;
+              done = 1;
               break;
             }
           } else if (send_identify(easy, token) != 0) {
             rc = GW_RET_RETRY;
+            done = 1;
             break;
           }
           identified = 1;
-          printf("drpc5: gateway identify sent\n");
+          dlogf("drpc5: gateway identify sent");
         } else if (op == 11) {
           acked = 1;
         } else if (op == 0) {
@@ -279,8 +313,8 @@ static int session_once(const char *token, const char *resume_url,
               const char *uobj = json_obj(buf, "user");
               if (uobj && *uobj == '{')
                 json_read_str(obj_find(uobj, "username"), who, sizeof(who));
-              printf("drpc5: gateway READY as %s (session %s)\n",
-                     who[0] ? who : "?", sid);
+              dlogf("drpc5: gateway READY as %s (session %s)",
+                    who[0] ? who : "?", sid);
             }
             pthread_mutex_lock(&g_gw.mu);
             g_gw.ready = 1;
@@ -304,28 +338,48 @@ static int session_once(const char *token, const char *resume_url,
           reidentify_at = now_ms() + cfg_clamped("reidentify_ms", 150, 0, 10000);
         } else if (op == 7) {
           rc = GW_RET_RETRY;
+          done = 1;
           break;
         }
       }
-      if (rc != GW_RET_RETRY && rc != GW_RET_FATAL && rc != GW_RET_STOP) break;
+      if (done) break;
     }
 
     if (!identified) continue;
 
     now = now_ms();
-    if (now < next_check) continue;
-    next_check = now + (long)cfg_clamped("poll_ms", 10000, 1000, 300000);
+/* Time sync is an HTTPS round trip; doing it inline blocks heartbeats for
+         up to the 15s timeout, which is long enough to lose the connection.
+         Only pay for it when the offset is actually stale. */
+      if (!g_time_known ||
+              now_ms() - g_time_synced_ms >
+                  cfg_clamped("resync_ms", 600000, 60000, 86400000))
+        need_sync = 1;
 
-    {
+      if (now < next_check) continue;
+      next_check = now + (long)cfg_clamped("poll_ms", 10000, 1000, 300000);
+
+      {
       char status[32], mode[32], name[192], details[192], state[192];
       char lk[320], lt[128], sk[128], st[128];
       gw_activity act;
       char frame[GW_FRAME];
 
-      if (!g_time_known ||
-              now_ms() - g_time_synced_ms >
-                  cfg_clamped("resync_ms", 600000, 60000, 86400000))
+      /* Sync here rather than mid-loop: the wait happens while we are already
+         between heartbeats, and the frame below is sent either way. Doing it
+         before ws_send would put the stall back on the heartbeat path. */
+      if (need_sync) {
+        need_sync = 0;
+        /* Track the connection before the blocking call so /api/status does
+           not read connected=1 while we are stuck in a network round trip. */
+        pthread_mutex_lock(&g_gw.mu);
+        g_gw.in_sync = 1;
+        pthread_mutex_unlock(&g_gw.mu);
         sync_time_offset();
+        pthread_mutex_lock(&g_gw.mu);
+        g_gw.in_sync = 0;
+        pthread_mutex_unlock(&g_gw.mu);
+      }
 
       reload_config(status, sizeof(status), mode, sizeof(mode), name,
                     sizeof(name), details, sizeof(details), state,
@@ -359,9 +413,22 @@ static int session_once(const char *token, const char *resume_url,
       gateway_build_presence(frame, sizeof(frame), &act, status, published,
                              sizeof(published));
       if (ws_send(easy, frame) != 0) {
-        printf("drpc5: presence send failed\n");
+        dlogf("drpc5: presence send failed");
         rc = GW_RET_RETRY;
         break;
+      }
+      /* ws_send only proves the bytes left the socket. A frame Discord
+         rejects still looks like success here, so record what we published
+         and let the next gateway error or close code show up in the log
+         instead of the payload looping silently for ever. */
+      /* gateway_build_presence() blanks published[] when the frame did not
+         fit, so an empty publish means the update was dropped, not that the
+         console is idle. */
+      if (!published[0] && act.has_game) {
+        dlogf("drpc5: presence frame truncated, published empty");
+      } else if (!g_last_pub[0] || strcmp(g_last_pub, published) != 0) {
+        dlogf("drpc5: presence -> %s", published[0] ? published : "(empty)");
+        snprintf(g_last_pub, sizeof g_last_pub, "%s", published);
       }
       note_frame(frame);
       note_status(status);
@@ -447,7 +514,7 @@ static void *gw_thread(void *arg) {
     }
 
     if (rc == GW_RET_FATAL) {
-      printf("drpc5: gateway stopped, token rejected\n");
+      dlogf("drpc5: gateway stopped, token rejected");
       resume_url[0] = 0;
       session_id[0] = 0;
       last_seq = -1;
