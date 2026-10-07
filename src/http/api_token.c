@@ -29,6 +29,7 @@ handle_token(int fd, const char *body) {
     send_json(fd, 400, "{\"error\":\"token too short\"}");
     return;
   }
+  mkdir(LABS_DIR, 0777);
   mkdir(STORE_DIR, 0777);
   /* 0600 before the bytes are written, and atomic: a torn token would still
      pass read_token's length check and permanently break gateway auth. */

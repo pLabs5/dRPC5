@@ -32,6 +32,7 @@ main(int argc, char *argv[]) {
   /* Open the log before anything that can fail, so a broken install still
      leaves a trace on disk rather than only in an unreachable stdout. */
   init_log();
+  mkdir(LABS_DIR, 0777);
   mkdir(STORE_DIR, 0777);
   dlogf("dRPC5: starting, pid %d", (int)getpid());
   load_prev_pid();

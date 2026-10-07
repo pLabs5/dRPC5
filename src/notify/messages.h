@@ -69,7 +69,7 @@
 #define MSG_TILE_ALREADY MSG_PREFIX ": tile already installed"
 
 /* The data directory could not be created. Placeholder: errno. */
-#define MSG_MKDIR_FAILED MSG_PREFIX ": cannot create " "/data/drpc5" " (errno %d)"
+#define MSG_MKDIR_FAILED MSG_PREFIX ": cannot create " "/data/pLabs5/dRPC5" " (errno %d)"
 
 /* The embedded package could not be written to disk. Placeholder: errno. */
 #define MSG_PKG_WRITE_FAILED MSG_PREFIX ": cannot write " "DRPC00001_00-DRPC5AAAAAAAAAAA.pkg" " (errno %d)"

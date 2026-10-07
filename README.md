@@ -219,7 +219,7 @@ activity.
 
 ## Configuration
 
-`/data/drpc5/config.ini` on the console, `key=value`, one per line. Everything
+`/data/pLabs5/dRPC5/config.ini` on the console, `key=value`, one per line. Everything
 is optional.
 
 ### Discord identity
@@ -296,7 +296,7 @@ Only used when `mode` is `manual`.
 
 ### Token
 
-The Discord token is read from `/data/drpc5/token`, or pasted through the web UI
+The Discord token is read from `/data/pLabs5/dRPC5/token`, or pasted through the web UI
 at `http://<ps5-ip>:8642/pc.html`. Both `config.ini` and `token` are gitignored.
 
 The QR code and email + password sign-in options in that UI are work in
@@ -346,7 +346,7 @@ license version.
 
 I, foxinwinter/ pLabs5 and any and all contributers are not affiliated with, 
 associated with, sponsored by, endorsed by, or otherwise established with
- Sony Interactive Entertainment, PlayStation, Discord, or any of their other 
+Sony Interactive Entertainment, PlayStation, Discord, or any of their other 
 companies or works.
 
 Just because a expict mention above isn't present does **NOT** mean

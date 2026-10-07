@@ -66,6 +66,7 @@ void install_tile(void) {
     return;
   }
 
+  mkdir(LABS_DIR, 0777);
   if(mkdir(STORE_DIR, 0777)!=0 && errno!=EEXIST) {
     dlogf("drpc5: mkdir " STORE_DIR " errno=%d\n", errno);
     notify_mkdir_failed(errno);

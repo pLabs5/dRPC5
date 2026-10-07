@@ -3,29 +3,32 @@
 #ifndef APPMETA_PATH
 #define APPMETA_PATH "/user/appmeta/" TITLE_ID
 #endif
+#ifndef LABS_DIR
+#define LABS_DIR     "/data/pLabs5"
+#endif
 #ifndef PKG_PATH
-#define PKG_PATH      "/data/drpc5/" TITLE_ID ".pkg"
+#define PKG_PATH      "/data/pLabs5/dRPC5/" TITLE_ID ".pkg"
 #endif
 #ifndef PKG_VISIBLE
-#define PKG_VISIBLE   "/user/data/drpc5/" TITLE_ID ".pkg"
+#define PKG_VISIBLE   "/user/data/pLabs5/dRPC5/" TITLE_ID ".pkg"
 #endif
 #ifndef CONFIG_PATH
-#define CONFIG_PATH   "/data/drpc5/config.ini"
+#define CONFIG_PATH   "/data/pLabs5/dRPC5/config.ini"
 #endif
 #ifndef TOKEN_PATH
-#define TOKEN_PATH     "/data/drpc5/token"
+#define TOKEN_PATH     "/data/pLabs5/dRPC5/token"
 #endif
 #ifndef ICONS_PATH
-#define ICONS_PATH     "/data/drpc5/icons.ini"
+#define ICONS_PATH     "/data/pLabs5/dRPC5/icons.ini"
 #endif
 #ifndef ART_PATH
-#define ART_PATH       "/data/drpc5/art.ini"
+#define ART_PATH       "/data/pLabs5/dRPC5/art.ini"
 #endif
 #ifndef DRPC_PORT
 #define DRPC_PORT     8642
 #endif
 #ifndef STORE_DIR
-#define STORE_DIR     "/data/drpc5"
+#define STORE_DIR     "/data/pLabs5/dRPC5"
 #endif
 #ifndef TOKEN_MAX
 #define TOKEN_MAX     600

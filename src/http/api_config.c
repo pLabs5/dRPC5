@@ -27,6 +27,7 @@ handle_config(int fd, const char *body) {
 
   cfg[0] = 0;
   read_file_all(CONFIG_PATH, cfg, sizeof(cfg), NULL);
+  mkdir(LABS_DIR, 0777);
   mkdir(STORE_DIR, 0777);
   /* Build the whole file in memory, then swap it in with one rename so the
      gateway thread never reads a half-written config. */
