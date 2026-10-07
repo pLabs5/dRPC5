@@ -188,8 +188,14 @@ void ts_after_ms(struct timespec *ts, long ms) {
 void nap_ms(int ms) {
   struct timespec ts;
   if (ms <= 0) return;
-  clock_gettime(CLOCK_REALTIME, &ts);
-  ts_after_ms(&ts, ms);
+  /* nanosleep() wants a duration, not a deadline. ts_after_ms() builds an
+     absolute CLOCK_REALTIME value for pthread_cond_timedwait(); reusing it
+     here made every nap last until the heat death of the universe, so the
+     gateway supervisor never came back after a session dropped. Sleep
+     relative to CLOCK_MONOTONIC instead, which also ignores any wall-clock
+     jump the console makes underneath us. */
+  ts.tv_sec = ms / 1000;
+  ts.tv_nsec = (long)(ms % 1000) * 1000000L;
   while (nanosleep(&ts, &ts) == -1 && errno == EINTR) {
   }
 }
