@@ -21,7 +21,7 @@
    =========================================================================== */
 const manifest_t kManifest = {
     .app_name = "dRPC5",
-.version = "0.5",
+.version = "0.5.1",
     .dev_name = "foxinwinter",
     .org_name = "pLabs5",
     .license = "AGPL-3.0-only",

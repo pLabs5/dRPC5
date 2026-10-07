@@ -33,8 +33,13 @@ static void *psn_worker(void *arg) {
   url[0] = 0;
   cached[0] = 0;
 
-  if (cache_get(job.title_id, cached, sizeof(cached)) == 0 &&
-      strncmp(cached, "mp:", 3) != 0) {
+  if (custom_art(job.title_id, url, sizeof(url)) == 0) {
+    if (strncmp(url, "mp:", 3) == 0) {
+      dlogf("drpc5: art %s override\n", job.title_id);
+      goto done;
+    }
+  } else if (cache_get(job.title_id, cached, sizeof(cached)) == 0 &&
+             strncmp(cached, "mp:", 3) != 0) {
     snprintf(url, sizeof(url), "%s", cached);
   } else if (fetch_art(job.concept_id, job.content_id, url, sizeof(url)) != 0) {
     dlogf("drpc5: art %s lookup failed\n", job.title_id);

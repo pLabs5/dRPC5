@@ -50,8 +50,11 @@ MANIFEST_VERSION := $(shell sed -n 's/^[[:space:]]*\.version[[:space:]]*=[[:spac
 ifeq ($(MANIFEST_VERSION),)
 $(error could not read .version from src/manifest/manifest.c)
 endif
-# The package format wants a zero-padded MM.SS stamp: 1.0 -> 01.00, 0.5 -> 00.50.
-PKG_VERSION := $(shell echo '$(MANIFEST_VERSION)' | awk -F. '{printf "%02d.%02d", $$1+0, $$2+0}')
+# The package format wants a zero-padded MM.SS stamp made from the major and
+# minor digits: 1.0 -> 01.00, 0.5 -> 00.50. The second component is tenths, so
+# it is scaled x10 into hundredths; a patch field ("0.5.1") does not reach the
+# stamp and stays 00.50.
+PKG_VERSION := $(shell echo '$(MANIFEST_VERSION)' | awk -F. '{printf "%02d.%02d", $$1+0, ($$2+0)*10}')
 # ...and the other way round: src/paths.h builds every install path from
 # TITLE_ID, so a manifest that disagrees would install under a different path
 # than it reports. Fail loudly rather than shipping a tile that half works.

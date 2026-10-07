@@ -18,6 +18,9 @@
 #ifndef ICONS_PATH
 #define ICONS_PATH     "/data/drpc5/icons.ini"
 #endif
+#ifndef ART_PATH
+#define ART_PATH       "/data/drpc5/art.ini"
+#endif
 #ifndef DRPC_PORT
 #define DRPC_PORT     8642
 #endif

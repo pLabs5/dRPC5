@@ -166,7 +166,11 @@ void detect_activity(gw_activity *act, int src_game, int show_platform,
     act->details = gdetails;
     act->state = "";
     if (show_artwork) {
-      if (large_key && large_key[0]) {
+      if (custom_art(app.title_id, gart, sizeof(gart)) == 0) {
+        act->large_key = gart;
+        if (strncmp(gart, "mp:", 3) != 0)
+          psn_art_refresh_async(app.title_id, app.concept_id, app.content_id);
+      } else if (large_key && large_key[0]) {
         act->large_key = large_key;
       } else if (psn_art_cached(app.title_id, gart, sizeof(gart)) == 0) {
         act->large_key = gart;
