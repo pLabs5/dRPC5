@@ -43,7 +43,7 @@ This was probably the hardest part of recent development.
 
 On a stock PS5, when logging in with Discord and trusting the application, your discord profile reports that you are on console.
 To achive this on a non-stock PS5 (normal discord integration not available) we need to do a bit of work.
-If use [lanyard](https://github.com/Phineas/lanyard) to get our Discord Status on our profile, the reponse looks a bit like:
+If we use [lanyard](https://github.com/Phineas/lanyard) to get our Discord Status on our profile, the reponse looks a bit like:
 ```json
   {
   "data": {
@@ -95,7 +95,7 @@ Reverse engineering that file results in the properties it sends to the gateway:
   "version": "1.00"
 }
 ```
-If we now send that information through to the websocket that we open to communicate with Discord, puts the user whos token is saved in the `console` bucket, which then sets the `active_on_discord_embedded` flag to true if you send a request to lanyard.
+If we now send that information through to the websocket that we open to communicate with Discord, that causes the discord account that is currently being used to be added to the `console` bucket, which then sets the `active_on_discord_embedded` flag to true if you send a request to lanyard.
 
 ## Prebuilt binaries
 
@@ -344,16 +344,15 @@ license version.
 
 ## Legal
 
-I, foxinwinter/ pLabs5 and any and all contributers are not affiliated with, associated with, sponsored by,
-endorsed by, or otherwise established with Sony Interactive Entertainment,
-PlayStation, Discord, or any of their other companies or works.
+I, foxinwinter/ pLabs5 and any and all contributers are not affiliated with, 
+associated with, sponsored by, endorsed by, or otherwise established with
+ Sony Interactive Entertainment, PlayStation, Discord, or any of their other 
+companies or works.
 
 Just because a expict mention above isn't present does **NOT** mean
-I, foxinwinter/ pLabs5, or any contributer is affiliated, associated, sponsered by, enorsed by, or otherwise established 
-with any entity unless explicitlly mentioned.
 
-This software is provided "as is", without warranty of any kind, express or
-implied. Use of this software is at your own risk.
+This software is provided "as is", without warranty of any kind, express 
+or implied. Use of this software is at your own risk.
 
 You are solely responsible for complying with Discord's Terms of Service,
 PlayStation's terms, and any applicable law.
