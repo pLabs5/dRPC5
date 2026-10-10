@@ -262,6 +262,17 @@ the gateway loop. Changes take effect on the next poll — no restart needed.
 | `platform` | `ps5` | `activity.platform`; only emitted for game activities |
 | `app_id` | — | Discord application ID for the activity |
 
+### Rest mode
+
+| Key | Default | Notes |
+|---|---|---|
+| `rest_mode` | `1` | Detect the console entering Rest/standby and park the Discord session until it wakes, instead of letting the connection seize mid-suspend. Set to `0` to disable. |
+
+Going into Rest freezes the process wherever it is, so the code watches the
+console's system-state flag and deliberately parks the gateway first. When the
+console wakes it drops any stale resume credentials and rejoins Discord with a
+fresh identify, so presence reappears on its own.
+
 Four further keys are written to the config file but **are not read by the code**
 and currently do nothing:
 

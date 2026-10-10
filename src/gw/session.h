@@ -8,6 +8,7 @@
 #define GW_RET_FATAL   2 /* the token was refused: stop until a new one appears */
 #define GW_RET_STOP    0 /* gateway_stop() was called */
 #define GW_RET_DISABLED 3 /* "enabled" was turned off in the config */
+#define GW_RET_REST    4 /* the console is entering rest mode: park until wake */
 
 /* Mutable state of one gateway connection, shared by the session loop, the
    frame dispatcher and the presence publisher. Bundling it keeps those three

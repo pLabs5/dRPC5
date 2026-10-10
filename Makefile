@@ -1,70 +1,25 @@
-SDK_CANDIDATES := $(PS5_PAYLOAD_SDK) $(CURDIR)/ps5-payload-sdk /opt/ps5-payload-sdk
-SDK_MAKEFILE   := $(firstword $(foreach d,$(SDK_CANDIDATES),$(wildcard $(d)/toolchain/prospero.mk)))
+# The shared build environment - payload SDK discovery, NixOS packaging quirks,
+# host tools, manifest/version plumbing - comes from the pLabs5 SDK. This file
+# keeps only what is dRPC5-specific: identity, sources, flags, and the package
+# and deploy targets.
 
-ifeq ($(SDK_MAKEFILE),)
-# send-payload is a plain host binary and needs no SDK, so only the targets that
-# actually cross-compile require one.
-ifneq ($(filter send-payload,$(MAKECMDGOALS)),)
-$(warning PS5 payload SDK not found: set PS5_PAYLOAD_SDK, or install it at ./ps5-payload-sdk or /opt/ps5-payload-sdk)
-else
-$(error PS5 payload SDK not found: set PS5_PAYLOAD_SDK, or install it at ./ps5-payload-sdk or /opt/ps5-payload-sdk)
+PLABS5_SDK_CANDIDATES := $(PLABS5_SDK) $(CURDIR)/plabs5-sdk /opt/plabs5-sdk
+PLABS5_SDK_FILE := $(firstword $(foreach d,$(PLABS5_SDK_CANDIDATES),$(wildcard $(d)/toolchain/plabs5.mk)))
+ifeq ($(PLABS5_SDK_FILE),)
+$(error pLabs5 SDK not found: set PLABS5_SDK, or install it at ./plabs5-sdk or /opt/plabs5-sdk)
 endif
-endif
-
-PS5_PAYLOAD_SDK := $(patsubst %/toolchain/prospero.mk,%,$(SDK_MAKEFILE))
-include $(SDK_MAKEFILE)
-
-ifneq ($(wildcard /etc/NIXOS),)
-LLVM_CONFIG ?= $(abspath $(CURDIR)/tools/nixos/llvm-config)
-export LLVM_CONFIG
-# libprosperopkg.so is a .NET assembly; it must load an OpenSSL runtime matching the
-# one it was built against (3.5.x). Newer store paths exist but .NET rejects them
-# ("No usable version of libssl was found"), so prefer 3.5 explicitly.
-# The wildcard also matches -dev outputs, which ship headers and no libssl.so, and
-# those sort first. Keep only directories that actually contain the runtime library.
-NIX_OPENSSL_DIRS := $(wildcard /nix/store/*openssl-3.5*/lib)
-ifeq ($(NIX_OPENSSL_DIRS),)
-NIX_OPENSSL_DIRS := $(wildcard /nix/store/*openssl-3*/lib)
-endif
-NIX_OPENSSL_LIB := $(firstword $(foreach d,$(NIX_OPENSSL_DIRS),$(if $(wildcard $(d)/libssl.so*),$(d))))
-ifneq ($(NIX_OPENSSL_LIB),)
-LPP_ENV := DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 LD_LIBRARY_PATH=$(NIX_OPENSSL_LIB)
-endif
-endif
-
-PS5_HOST ?= ps5
-PS5_PORT ?= 9021
-
-HOSTCC     ?= cc
-HOSTCFLAGS ?= -O2 -Wall -Wextra -Werror
-LPP_LIB ?= tools/lib/libprosperopkg.so
-LPP_ENV ?= DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+PLABS5_SDK := $(patsubst %/toolchain/plabs5.mk,%,$(PLABS5_SDK_FILE))
 
 TITLE_ID    := DRPC00001
 CONTENT_ID  := UP9000-DRPC00001_00-DRPC5AAAAAAAAAAA
 PKG_TITLE   := dRPC5
-# The version is defined once, in src/manifest/manifest.c, and the package stamp is
-# derived from it here. Storing it twice is how a tile ends up reporting a
-# different version from /api/status, so there is deliberately no second field.
-MANIFEST_VERSION := $(shell sed -n 's/^[[:space:]]*\.version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' src/manifest/manifest.c)
-ifeq ($(MANIFEST_VERSION),)
-$(error could not read .version from src/manifest/manifest.c)
-endif
-# The package format wants a zero-padded MM.SS stamp made from the major and
-# minor digits: 1.0 -> 01.00, 0.5 -> 00.50. The second component is tenths, so
-# it is scaled x10 into hundredths; a patch field ("0.5.1") does not reach the
-# stamp and stays 00.50.
-PKG_VERSION := $(shell echo '$(MANIFEST_VERSION)' | awk -F. '{printf "%02d.%02d", $$1+0, ($$2+0)*10}')
-# ...and the other way round: src/paths.h builds every install path from
-# TITLE_ID, so a manifest that disagrees would install under a different path
-# than it reports. Fail loudly rather than shipping a tile that half works.
-MANIFEST_TITLE := $(shell sed -n 's/^[[:space:]]*\.title_id[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' src/manifest/manifest.c)
-ifneq ($(MANIFEST_TITLE),$(TITLE_ID))
-$(error .title_id "$(MANIFEST_TITLE)" in src/manifest/manifest.c does not match TITLE_ID "$(TITLE_ID)" here)
-endif
 
-BUILD := build
-DIST  := dist
+include $(PLABS5_SDK_FILE)
+
+# dRPC5 stamps the minor component in tenths (0.5 -> 00.50). Keep that here
+# until the next version bump moves this repo onto the SDK's canonical
+# two-digit rule.
+PKG_VERSION := $(shell printf '%s' '$(MANIFEST_VERSION)' | awk -F. '{printf "%02d.%02d", $$1+0, ($$2+0)*10}')
 
 # -Os + section GC keeps the payload small; -g0 drops debug info, which was
 # ~130KB of the deployed ELF. Override REL for a debug build: make REL=1
@@ -75,9 +30,15 @@ else
 OPT := -Os -g0 -ffunction-sections -fdata-sections
 endif
 
-CFLAGS := -Wall -Werror $(OPT) -DTITLE_ID=\"$(TITLE_ID)\" -Isrc
+# The project's include/ (the <plabs5/paths.h> shim) and src/ must be searched
+# before the SDK's include/ so the project's paths/messages win.
+CFLAGS := -Wall -Werror $(OPT) -DTITLE_ID=\"$(TITLE_ID)\" -Iinclude -Isrc -I$(PLABS5_INCLUDE)
 LDFLAGS := $(if $(REL),,-Wl,--gc-sections)
 LDADD  := -lSceIpmi -lSceAppInstUtil -lSceUserService -lSceSystemService -lpthread
+
+# Layer 2 bootstrap behaviour: lowercase log prefix, and no version stamping -
+# the tile is only (re)installed when it is absent.
+PLABS5_TARGET_DEFS := -DPLABS5_LOG_PREFIX='"drpc5"'
 
 PKGSRC   := $(BUILD)/bundled_tile_pkg.c
 WEBSRC   := $(BUILD)/web_assets.c
@@ -95,7 +56,6 @@ HEADERS  := $(sort $(shell find src -name '*.h'))
 # header changes, which is the correctness guarantee that matters here; the flag
 # is kept because toolchains without that wrapper do emit the depfile.
 DEPFLAGS := -MMD -MP
-.DELETE_ON_ERROR:
 -include dRPC5.d
 
 THIRD_PARTY := third_party
@@ -108,21 +68,10 @@ CACERT      := $(THIRD_PARTY)/cacert.pem
 
 all: dRPC5.elf
 
-dRPC5.elf: $(PAYLOAD_SRCS) $(HEADERS) $(PKGSRC) $(WEBSRC) $(CASRC) $(CURL_LIBS)
-	$(CC) $(CFLAGS) $(DEPFLAGS) $(LDFLAGS) -I$(BUILD) -I$(CURL_INC) -isystem $(THIRD_PARTY)/mbedtls/include -o $@ $(PAYLOAD_SRCS) $(PKGSRC) $(WEBSRC) $(CASRC) $(CURL_LIBS) $(LDADD)
+dRPC5.elf: $(PAYLOAD_SRCS) $(HEADERS) $(PKGSRC) $(WEBSRC) $(CASRC) $(CURL_LIBS) $(PLABS5_LIB)
+	$(CC) $(CFLAGS) $(DEPFLAGS) $(LDFLAGS) -I$(BUILD) -I$(CURL_INC) -isystem $(THIRD_PARTY)/mbedtls/include -o $@ $(PAYLOAD_SRCS) $(PLABS5_LIB) $(PKGSRC) $(WEBSRC) $(CASRC) $(CURL_LIBS) $(LDADD)
 
-$(BUILD)/embed: tools/embed.c
-	mkdir -p $(BUILD)
-	$(HOSTCC) $(HOSTCFLAGS) -o $@ $<
-
-$(BUILD)/mk_tile_pkg: tools/mk_tile_pkg.c
-	mkdir -p $(BUILD)
-	$(HOSTCC) $(HOSTCFLAGS) -o $@ $< -ldl
-
-SEND_PAYLOAD := tools/send-payload
-
-$(SEND_PAYLOAD): tools/deploy/send-payload.c
-	$(HOSTCC) $(HOSTCFLAGS) -o $@ $<
+SEND_PAYLOAD := $(BUILD)/send-payload
 
 $(CASRC): $(CACERT) $(BUILD)/embed
 	$(BUILD)/embed --out $@ --dec kCaPem=$(CACERT):kCaPemSize
@@ -160,8 +109,8 @@ $(BUILD)/homebrew/eboot.bin: $(BUILD)/tile-elf tile/sce_sys/param.json tile/sce_
 	cp tile/sce_sys/icon0.png $(BUILD)/homebrew/sce_sys/icon0.png
 
 
-$(BUILD)/tile-elf: $(BUILD)/tile-elf.o src/eboot/eboot.x
-	$(LD) --static -T src/eboot/eboot.x -o $@ $(BUILD)/tile-elf.o
+$(BUILD)/tile-elf: $(BUILD)/tile-elf.o $(PLABS5_SDK)/target/eboot.x
+	$(LD) --static -T $(PLABS5_SDK)/target/eboot.x -o $@ $(BUILD)/tile-elf.o
 
 $(BUILD)/tile-elf.o: src/eboot/eboot.c
 	mkdir -p $(BUILD)

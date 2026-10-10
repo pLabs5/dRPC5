@@ -8,6 +8,7 @@
 #include "core/json.h"
 #include "core/util.h"
 #include "gw/gateway.h"
+#include "gw/rest.h"
 #include "manifest/manifest.h"
 #include "paths.h"
 
@@ -29,6 +30,7 @@ handle_status(int fd) {
   int gw_connected = 0;
   int gw_ready = 0;
   int gw_auth_failed = 0;
+  int gw_rest = rest_active();
 
   gateway_status(&gw_connected, &gw_ready, &gw_auth_failed, activity, sizeof(activity));
   lan_ip(ip, sizeof(ip));
@@ -38,10 +40,11 @@ handle_status(int fd) {
               "\"installed\":%d,\"port\":%d,\"has_token\":%d,"
               "\"ip\":\"%s\","
               "\"gateway\":{\"connected\":%d,\"ready\":%d,"
-              "\"auth_failed\":%d,\"activity\":\"%s\"},"
+              "\"auth_failed\":%d,\"rest\":%d,\"activity\":\"%s\"},"
               "\"config\":{",
               kManifest.app_name, kManifest.version, installed, DRPC_PORT,
-              has_token, ip, gw_connected, gw_ready, gw_auth_failed, activity);
+              has_token, ip, gw_connected, gw_ready, gw_auth_failed, gw_rest,
+              activity);
   cfg[0] = 0;
   read_file_all(CONFIG_PATH, cfg, sizeof(cfg), NULL);
   {

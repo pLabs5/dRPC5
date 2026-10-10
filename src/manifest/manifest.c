@@ -1,7 +1,5 @@
 #include "manifest/manifest.h"
 
-#include <stdio.h>
-
 /* ===========================================================================
    EDIT THESE VALUES.
 
@@ -30,8 +28,3 @@ const manifest_t kManifest = {
     .repo_url = "https://github.com/pLabs5/dRPC5",
     .client_version = "1.00",
 };
-
-void manifest_identity(char *out, size_t cap) {
-  if (!out || cap == 0) return;
-  snprintf(out, cap, "%s %s", kManifest.app_name, kManifest.version);
-}

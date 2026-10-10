@@ -1,3 +1,4 @@
 #pragma once
 
-void install_tile(void);
+/* Shared tile-install logic lives in the pLabs5 SDK. */
+#include <plabs5/install.h>

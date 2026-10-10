@@ -2,128 +2,18 @@ name: build
 
 on:
   push:
-    paths-ignore:
-      - "**/*.md"
   pull_request:
-    paths-ignore:
-      - "**/*.md"
   workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: false
-
-permissions:
-  contents: read
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout dRPC5
-        uses: actions/checkout@v4
-
-      - name: Checkout pacbrew-repo
-        uses: actions/checkout@v4
-        with:
-          repository: ps5-payload-dev/pacbrew-repo
-          path: pacbrew-repo
-
-      - name: Setup build environment
-        run: |
-          sudo apt update
-          sudo apt install -y \
-            autoconf \
-            automake \
-            build-essential \
-            clang-18 \
-            curl \
-            git \
-            libarchive-tools \
-            libtool \
-            lld-18 \
-            makepkg \
-            meson \
-            pacman-package-manager \
-            pkg-config \
-            unzip \
-            xxd \
-            zip
-
-      - name: Build PS5 payload SDK
-        working-directory: pacbrew-repo/sdk
-        run: |
-          makepkg -c -f
-          sudo pacman --noconfirm -U ./ps5-payload-*.pkg.tar.gz
-
-      # third_party/curl and the mbedtls archives are committed binaries built
-      # with LLVM 21. lld 18 cannot read their objects ("Unknown attribute kind
-      # 102"), so point the SDK's compiler and linker at LLVM 21 instead.
-      - name: Use LLVM 21 for the SDK toolchain
-        run: |
-          set -euo pipefail
-          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
-          chmod +x /tmp/llvm.sh
-          sudo /tmp/llvm.sh 21
-          sudo apt-get install -y clang-21 lld-21
-          clang-21 --version | head -1
-          SDK=/opt/ps5-payload-sdk
-          for t in clang ld.lld lld; do
-            if [ -e "$SDK/bin/$t" ]; then
-              echo "repointing $SDK/bin/$t -> $(command -v ${t}-21)"
-              sudo ln -sf "$(command -v ${t}-21)" "$SDK/bin/$t"
-            fi
-          done
-
-      - name: Fetch LibProsperoPKG
-        run: |
-          mkdir -p tools/lib
-          curl -fsSL -o /tmp/libprosperopkg.zip \
-            https://github.com/SvenGDK/LibProsperoPKG/releases/download/v2.5/libprosperopkg-linux-x64.zip
-          unzip -oq /tmp/libprosperopkg.zip -d tools/lib
-          LPP_SO="$(find tools/lib -name '*.so' | head -n1)"
-          test -n "$LPP_SO"
-          echo "LPP_LIB=$LPP_SO" >> "$GITHUB_ENV"
-
-      - name: Build payload and tile PKG
-        run: make all LPP_LIB="$LPP_LIB"
-
-      - name: Build summary
-        run: |
-          ls -la dRPC5.elf dist/
-          file dRPC5.elf dist/drpc5-tile.pkg || true
-
-      - name: Generate checksum
-        run: sha256sum dRPC5.elf > dRPC5.elf.sha256
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: drpc5
-          path: |
-            dRPC5.elf
-            dRPC5.elf.sha256
-            dist/drpc5-tile.pkg
-          if-no-files-found: error
-
-  release:
-    needs: build
+    uses: pLabs5/.github/.github/workflows/build-payload.yml@main
     permissions:
       contents: write
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: drpc5
-          path: dist
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            dist/dRPC5.elf
-            dist/dRPC5.elf.sha256
-            dist/drpc5-tile.pkg
+    with:
+      artifact-name: drpc5
+      elf-path: dRPC5.elf
+      artifact-paths: |
+        dRPC5.elf
+        dRPC5.elf.sha256
+        dist/drpc5-tile.pkg

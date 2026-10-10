@@ -1,4 +1,5 @@
 #include "gw/gw_common.h"
+#include "gw/rest.h"
 #include "gw/session.h"
 #include "gw/state.h"
 
@@ -82,6 +83,12 @@ int session_once(const char *token, const char *resume_url,
     }
     if (!cfg_bool("enabled", 1)) {
       rc = GW_RET_DISABLED;
+      break;
+    }
+    if (rest_active()) {
+      /* The console is going into rest mode; leave now so we do not get
+         frozen mid-write. gw_thread() parks here until it wakes. */
+      rc = GW_RET_REST;
       break;
     }
 

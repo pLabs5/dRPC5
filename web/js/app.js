@@ -41,6 +41,10 @@ function renderGateway(g) {
     text = 'presence: token rejected';
     cls = 'bad';
     $('gw-state').textContent = 'discord rejected the token - sign in again';
+  } else if (g.rest) {
+    text = 'presence: resting';
+    cls = '';
+    $('gw-state').textContent = 'presence: resting (console in standby)';
   } else if (g.ready) {
     text = 'presence: live';
     cls = 'ok';
@@ -68,7 +72,7 @@ function collectConfig() {
               'status','mode','media_line',
               'poll_ms','hb_min_ms','psn_retry_ms','resync_ms','reidentify_ms'];
   var checks = ['enabled','src_game','src_media','src_app','src_idle',
-                'show_artwork','show_platform'];
+                'show_artwork','show_platform','rest_mode'];
   var obj = {};
   keys.forEach(function(k){ var el = $('c-'+k); if (el) obj[k] = el.value; });
   checks.forEach(function(k){

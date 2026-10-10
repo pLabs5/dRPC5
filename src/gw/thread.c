@@ -1,4 +1,5 @@
 #include "gw/gw_common.h"
+#include "gw/rest.h"
 #include "gw/session.h"
 #include "gw/state.h"
 
@@ -28,6 +29,23 @@ static void *gw_thread(void *arg) {
 
     if (__atomic_load_n(&g_gw.stop, __ATOMIC_RELAXED)) break;
 
+    if (rest_active()) {
+      /* The console is in rest mode, so the whole process is frozen. The OS
+         could have cut us off mid-write, which makes the resume credentials
+         untrustworthy; park here until the console wakes, then start over with
+         a fresh session. */
+      while (rest_active() &&
+             !__atomic_load_n(&g_gw.stop, __ATOMIC_RELAXED)) {
+        nap_ms(1000);
+      }
+      if (__atomic_load_n(&g_gw.stop, __ATOMIC_RELAXED)) break;
+      resume_url[0] = 0;
+      session_id[0] = 0;
+      last_seq = -1;
+      attempts = 0;
+      continue;
+    }
+
     if (!cfg_bool("enabled", 1)) {
       nap_ms(2000);
       continue;
@@ -54,6 +72,18 @@ static void *gw_thread(void *arg) {
       last_seq = -1;
       attempts = 0;
       nap_ms(2000);
+      continue;
+    }
+
+    if (rc == GW_RET_REST) {
+      /* Dropped out of a live session partway into rest mode. The loop-top
+         park normally handles the wait and drops the credentials; this branch
+         exists for the race where the console wakes again before we get
+         there. */
+      resume_url[0] = 0;
+      session_id[0] = 0;
+      last_seq = -1;
+      attempts = 0;
       continue;
     }
 
@@ -112,6 +142,7 @@ int gateway_start(void) {
   if (g_gw.th_valid) return 0;
   g_gw.stop = 0;
   g_gw.auth_failed = 0;
+  if (rest_start() != 0) return -1;
   if (pthread_create(&g_gw.th, NULL, gw_thread, NULL) != 0) return -1;
   g_gw.th_valid = 1;
   return 0;
@@ -124,4 +155,5 @@ void gateway_stop(void) {
   __atomic_store_n(&g_gw.stop, 1, __ATOMIC_RELEASE);
   pthread_join(th, NULL);
   g_gw.th_valid = 0;
+  rest_stop();
 }
